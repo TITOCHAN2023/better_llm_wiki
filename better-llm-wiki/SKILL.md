@@ -257,7 +257,7 @@ Every action on the wiki is one of these five. Each appends an entry to the curr
 2. For each page over ~1200 words: plan a split into `wiki/concepts/<topic>/` with an index + sub-pages. Confirm the plan with the user before writing.
 3. For each pair of near-duplicate pages: propose a merge. Confirm, then rewrite.
 4. Regenerate `wiki/index.md` so every page is listed exactly once.
-5. **Link self-check**: grep every written/modified `wiki/` file for `](../` and for hrefs that lack a leading `/` — replace either with the content-root form `[..](/…md)` immediately. This is a hard rule, not a guideline.
+5. **Links**: write them content-root anchored — `[Title](/concepts/Foo.md)`. No manual grep needed: `../`, a missing leading `/`, dead targets, and unquoted spaces are all hard errors the lint step below catches and makes you fix.
 6. **Close with lint**: run `python3 <skill-path>/scripts/lint_wiki.py <wiki-root>` (incremental by default). Fix every reported issue before moving on. After renames/deletes specifically, add `--full` so the global graph rebuilds.
 7. Log: `## [HH:MM] compile | <what you did — files touched, splits, merges>`
 8. **Checkpoint state into git** (final step, after the log entry is written): run `python3 <skill-path>/scripts/commit_wiki.py <wiki-root>`. Stages only the truth-source paths (`SCHEMA.md` / `INTEREST.md` / `wiki/` / `raw/` / `audit/` / `log/`) — never `git add -A`, so unrelated WIP stays put. Commit message auto-derives from the log entry just written. No-op if the wiki isn't in git.
@@ -282,7 +282,7 @@ Add a new source. **One source typically touches 5–15 wiki pages.**
 4. Create or update relevant concept pages in `wiki/concepts/`. Respect divide-and-conquer: if a concept page would exceed 1200 words, split instead of cramming.
 5. Create or update entity pages in `wiki/entities/` for any new people / tools / papers / organizations referenced.
 6. Update `wiki/index.md` so the new pages appear under the right "I want to ..." entry point.
-7. **Link self-check**: grep every written/modified `wiki/` file for `](../` and for hrefs that lack a leading `/` — replace either with the content-root form `[..](/…md)` immediately.
+7. **Links**: write them content-root anchored — `[Title](/concepts/Foo.md)`. No manual grep needed: `../`, a missing leading `/`, dead targets, and unquoted spaces are all hard errors the lint step below catches and makes you fix.
 8. **Close with lint**: run `python3 <skill-path>/scripts/lint_wiki.py <wiki-root>`. Fix every reported issue (dead links, missing index entry, wrong title, sources ref to a file that wasn't actually written) before moving on.
 9. **Scope the neighborhood for audit — sliding-window loop** (advisory, never blocks): the script computes one window; the *loop* is your job. A fix in this window typically edits new pages, which become the next window's seeds — so a single pass is never enough on its own. **The script runs the loop as a queue/BFS worklist: the state file records which nodes it has already *enqueued* (processed)**, so each iteration only shows what's *new* this round — an edge back toward an already-processed node is shielded (that relationship was reconciled when the earlier node was processed, and every fix aligns to the source-of-truth node, so it stays consistent).
 
