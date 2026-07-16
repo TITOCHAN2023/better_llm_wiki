@@ -456,14 +456,81 @@ def query_index_is_fresh(root: Path, conn: sqlite3.Connection) -> bool:
     return True
 
 
+INDEX_HEAD_REL = ".query-index/last-index-head.graph"
+
+
+def _git_out(root: Path, *args: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), *args], check=False, capture_output=True, text=True
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
+def _wiki_is_git_root(root: Path) -> bool:
+    top = _git_out(root, "rev-parse", "--show-toplevel")
+    if not top:
+        return False
+    try:
+        return Path(top.strip()).resolve() == root.resolve()
+    except OSError:
+        return False
+
+
+def _git_head(root: Path) -> str | None:
+    out = _git_out(root, "rev-parse", "HEAD")
+    return out.strip() if out and out.strip() else None
+
+
+def _record_index_head(root: Path) -> None:
+    """Remember the commit the index reflects, for the O(1) freshness fast-path.
+    No-op when the wiki is not its own git repo."""
+    if not _wiki_is_git_root(root):
+        return
+    head = _git_head(root)
+    if not head:
+        return
+    try:
+        (root / INDEX_HEAD_REL).write_text(json.dumps({"head": head}), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def git_index_fresh_fast(root: Path) -> bool:
+    """O(1) freshness check: the index is fresh iff the wiki is its own git repo,
+    its working tree is clean under wiki/, and HEAD matches the commit the index
+    was built at. Returns False when it cannot confirm cheaply — the caller then
+    runs the exact stat-based check, so this never yields a stale index."""
+    if not _wiki_is_git_root(root):
+        return False
+    head = _git_head(root)
+    if not head:
+        return False
+    try:
+        stored = json.loads((root / INDEX_HEAD_REL).read_text(encoding="utf-8")).get("head")
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return False
+    if stored != head:
+        return False
+    status = _git_out(root, "status", "--porcelain", "--", "wiki")
+    return status is not None and status.strip() == ""
+
+
 def ensure_query_index(root: Path, rebuild: bool = False) -> bool:
     db_path = index_db_path(root)
     if db_path.exists() and not rebuild:
+        # O(1) git fast-path: skip the whole-corpus stat sweep when git confirms
+        # nothing under wiki/ changed since the index was built.
+        if git_index_fresh_fast(root):
+            return True
         try:
             conn = sqlite3.connect(db_path)
             try:
                 row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
                 if row and str(row[0]) == INDEX_SCHEMA_VERSION and query_index_is_fresh(root, conn):
+                    _record_index_head(root)
                     return True
             finally:
                 conn.close()
@@ -481,6 +548,7 @@ def ensure_query_index(root: Path, rebuild: bool = False) -> bool:
         elif result.stdout.strip():
             print(result.stdout.strip(), file=sys.stderr)
         return False
+    _record_index_head(root)
     return True
 
 
