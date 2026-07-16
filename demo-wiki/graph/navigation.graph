@@ -1,0 +1,371 @@
+{
+  "edges": [
+    {
+      "d": 1,
+      "k": "contains",
+      "s": "nav:wiki/index.md",
+      "t": "nav:wiki/index.md#agent",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "contains",
+      "s": "nav:wiki/index.md",
+      "t": "nav:wiki/index.md#concepts",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "contains",
+      "s": "nav:wiki/index.md",
+      "t": "nav:wiki/index.md#entities",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "contains",
+      "s": "nav:wiki/index.md",
+      "t": "nav:wiki/index.md#open-questions",
+      "w": 1
+    },
+    {
+      "d": 1.0,
+      "k": "contains",
+      "s": "nav:wiki/index.md",
+      "t": "nav:wiki/index.md#section",
+      "w": 4
+    },
+    {
+      "d": 1,
+      "k": "contains",
+      "s": "nav:wiki/index.md",
+      "t": "nav:wiki/index.md#summaries-chronological",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#agent",
+      "t": "wiki/concepts/Bounded-Memory Agents.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#entities",
+      "t": "wiki/entities/AgenticSTS.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#entities",
+      "t": "wiki/entities/Mamba.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#entities",
+      "t": "wiki/entities/vLLM.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#section",
+      "t": "wiki/concepts/Agent Context Compilation.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#section",
+      "t": "wiki/concepts/Gated DeltaNet.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#section",
+      "t": "wiki/concepts/HyLo.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#section",
+      "t": "wiki/concepts/Knowledge Distillation.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#section",
+      "t": "wiki/concepts/Long-Context Training.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#section",
+      "t": "wiki/concepts/Model Upcycling.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#section",
+      "t": "wiki/concepts/Multi-Head Latent Attention.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#summaries-chronological",
+      "t": "wiki/summaries/acc-compiling-agent-trajectories-long-context-training.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#summaries-chronological",
+      "t": "wiki/summaries/agenticsts-bounded-memory-testbed.md",
+      "w": 1
+    },
+    {
+      "d": 1,
+      "k": "listed_in",
+      "s": "nav:wiki/index.md#summaries-chronological",
+      "t": "wiki/summaries/hylo-long-context-aware-upcycling.md",
+      "w": 1
+    }
+  ],
+  "nodes": [
+    {
+      "displayName": "索引 — LLM Research",
+      "id": "nav:wiki/index.md",
+      "kind": "index",
+      "page": "wiki/index.md",
+      "qualifiedName": "Navigation / Index"
+    },
+    {
+      "displayName": "Agent 记忆与长程决策",
+      "id": "nav:wiki/index.md#agent",
+      "kind": "section",
+      "level": 3,
+      "page": "wiki/index.md",
+      "qualifiedName": "Navigation / Agent 记忆与长程决策"
+    },
+    {
+      "displayName": "Concepts",
+      "id": "nav:wiki/index.md#concepts",
+      "kind": "section",
+      "level": 2,
+      "page": "wiki/index.md",
+      "qualifiedName": "Navigation / Concepts"
+    },
+    {
+      "displayName": "Entities",
+      "id": "nav:wiki/index.md#entities",
+      "kind": "section",
+      "level": 2,
+      "page": "wiki/index.md",
+      "qualifiedName": "Navigation / Entities"
+    },
+    {
+      "displayName": "Open Questions",
+      "id": "nav:wiki/index.md#open-questions",
+      "kind": "section",
+      "level": 2,
+      "page": "wiki/index.md",
+      "qualifiedName": "Navigation / Open Questions"
+    },
+    {
+      "displayName": "训练技术",
+      "id": "nav:wiki/index.md#section",
+      "kind": "section",
+      "level": 3,
+      "page": "wiki/index.md",
+      "qualifiedName": "Navigation / 训练技术"
+    },
+    {
+      "displayName": "Summaries (chronological)",
+      "id": "nav:wiki/index.md#summaries-chronological",
+      "kind": "section",
+      "level": 2,
+      "page": "wiki/index.md",
+      "qualifiedName": "Navigation / Summaries (chronological)"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "concepts",
+        "Agent Context Compilation"
+      ],
+      "displayName": "Agent Context Compilation",
+      "id": "wiki/concepts/Agent Context Compilation.md",
+      "kind": "concept",
+      "qualifiedName": "concepts / Agent Context Compilation",
+      "title": "Agent Context Compilation"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "concepts",
+        "Bounded-Memory Agents"
+      ],
+      "displayName": "Bounded-Memory Agents",
+      "id": "wiki/concepts/Bounded-Memory Agents.md",
+      "kind": "concept",
+      "qualifiedName": "concepts / Bounded-Memory Agents",
+      "title": "Bounded-Memory Agents"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "concepts",
+        "Gated DeltaNet"
+      ],
+      "displayName": "Gated DeltaNet",
+      "id": "wiki/concepts/Gated DeltaNet.md",
+      "kind": "concept",
+      "qualifiedName": "concepts / Gated DeltaNet",
+      "title": "Gated DeltaNet"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "concepts",
+        "HyLo"
+      ],
+      "displayName": "HyLo",
+      "id": "wiki/concepts/HyLo.md",
+      "kind": "concept",
+      "qualifiedName": "concepts / HyLo",
+      "title": "HyLo"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "concepts",
+        "知识蒸馏"
+      ],
+      "displayName": "知识蒸馏",
+      "id": "wiki/concepts/Knowledge Distillation.md",
+      "kind": "concept",
+      "qualifiedName": "concepts / 知识蒸馏",
+      "title": "知识蒸馏"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "concepts",
+        "长上下文训练"
+      ],
+      "displayName": "长上下文训练",
+      "id": "wiki/concepts/Long-Context Training.md",
+      "kind": "concept",
+      "qualifiedName": "concepts / 长上下文训练",
+      "title": "长上下文训练"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "concepts",
+        "模型升级改造"
+      ],
+      "displayName": "模型升级改造",
+      "id": "wiki/concepts/Model Upcycling.md",
+      "kind": "concept",
+      "qualifiedName": "concepts / 模型升级改造",
+      "title": "模型升级改造"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "concepts",
+        "Multi-Head Latent Attention"
+      ],
+      "displayName": "Multi-Head Latent Attention",
+      "id": "wiki/concepts/Multi-Head Latent Attention.md",
+      "kind": "concept",
+      "qualifiedName": "concepts / Multi-Head Latent Attention",
+      "title": "Multi-Head Latent Attention"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "entities",
+        "AgenticSTS"
+      ],
+      "displayName": "AgenticSTS",
+      "id": "wiki/entities/AgenticSTS.md",
+      "kind": "entity",
+      "qualifiedName": "entities / AgenticSTS",
+      "title": "AgenticSTS"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "entities",
+        "Mamba"
+      ],
+      "displayName": "Mamba",
+      "id": "wiki/entities/Mamba.md",
+      "kind": "entity",
+      "qualifiedName": "entities / Mamba",
+      "title": "Mamba"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "entities",
+        "vLLM"
+      ],
+      "displayName": "vLLM",
+      "id": "wiki/entities/vLLM.md",
+      "kind": "entity",
+      "qualifiedName": "entities / vLLM",
+      "title": "vLLM"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "summaries",
+        "ACC: Compiling Agent Trajectories for Long-Context Training"
+      ],
+      "displayName": "ACC: Compiling Agent Trajectories for Long-Context Training",
+      "id": "wiki/summaries/acc-compiling-agent-trajectories-long-context-training.md",
+      "kind": "summary",
+      "qualifiedName": "summaries / ACC: Compiling Agent Trajectories for Long-Context Training",
+      "title": "ACC: Compiling Agent Trajectories for Long-Context Training"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "summaries",
+        "AgenticSTS: 长程 Agent 的有界记忆测试床"
+      ],
+      "displayName": "AgenticSTS: 长程 Agent 的有界记忆测试床",
+      "id": "wiki/summaries/agenticsts-bounded-memory-testbed.md",
+      "kind": "summary",
+      "qualifiedName": "summaries / AgenticSTS: 长程 Agent 的有界记忆测试床",
+      "title": "AgenticSTS: 长程 Agent 的有界记忆测试床"
+    },
+    {
+      "breadcrumb": [
+        "wiki",
+        "summaries",
+        "HyLo: 长上下文感知的混合架构升级"
+      ],
+      "displayName": "HyLo: 长上下文感知的混合架构升级",
+      "id": "wiki/summaries/hylo-long-context-aware-upcycling.md",
+      "kind": "summary",
+      "qualifiedName": "summaries / HyLo: 长上下文感知的混合架构升级",
+      "title": "HyLo: 长上下文感知的混合架构升级"
+    }
+  ],
+  "root": "wiki/index.md",
+  "schema": 1
+}

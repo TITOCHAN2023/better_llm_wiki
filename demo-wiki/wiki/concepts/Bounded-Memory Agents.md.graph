@@ -1,0 +1,63 @@
+{
+  "breadcrumb": [
+    "wiki",
+    "concepts",
+    "Bounded-Memory Agents"
+  ],
+  "displayName": "Bounded-Memory Agents",
+  "ego": {
+    "in": [
+      {
+        "from": "wiki/entities/AgenticSTS.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/index.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/summaries/agenticsts-bounded-memory-testbed.md",
+        "kind": "links_to"
+      }
+    ],
+    "out": [
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Agent Context Compilation.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Long-Context Training.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/entities/AgenticSTS.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/summaries/agenticsts-bounded-memory-testbed.md"
+      }
+    ]
+  },
+  "fileName": "Bounded-Memory Agents.md",
+  "hash": "sha256:797f54348beea7c73d7e0e29f48c819b577c1f85db0892433aafe478f021123e",
+  "id": "wiki/concepts/Bounded-Memory Agents.md",
+  "kind": "concept",
+  "parentName": "concepts",
+  "qualifiedName": "concepts / Bounded-Memory Agents",
+  "schema": 1,
+  "shortName": "Bounded-Memory Agents",
+  "stats": {
+    "degree": 7,
+    "inbound": 3,
+    "outbound": 4
+  },
+  "summary": "有界记忆 Agent 指：把长程 LLM agent 的记忆看作一份「契约」——规定每一步决策被允许看到什么——并刻意让每个提示的长度**保持有界**，而不是随运行变长而无限增长。该概念由 [AgenticSTS](/entities/AgenticSTS.md) 测试床提出并 instrument。",
+  "tags": [
+    "agent-memory",
+    "long-horizon-agent",
+    "bounded-context",
+    "typed-retrieval"
+  ],
+  "title": "Bounded-Memory Agents"
+}

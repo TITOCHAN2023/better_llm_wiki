@@ -1,0 +1,66 @@
+{
+  "breadcrumb": [
+    "wiki",
+    "concepts",
+    "Gated DeltaNet"
+  ],
+  "displayName": "Gated DeltaNet",
+  "ego": {
+    "in": [
+      {
+        "from": "wiki/concepts/HyLo.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/concepts/Multi-Head Latent Attention.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/entities/Mamba.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/index.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/summaries/hylo-long-context-aware-upcycling.md",
+        "kind": "links_to"
+      }
+    ],
+    "out": [
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/HyLo.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Multi-Head Latent Attention.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/entities/Mamba.md"
+      }
+    ]
+  },
+  "fileName": "Gated DeltaNet.md",
+  "hash": "sha256:76b6497e2b6cf7a00f3186873f0bc19795b4f1595a717bf187ef3d66efdb66bc",
+  "id": "wiki/concepts/Gated DeltaNet.md",
+  "kind": "concept",
+  "parentName": "concepts",
+  "qualifiedName": "concepts / Gated DeltaNet",
+  "schema": 1,
+  "shortName": "Gated DeltaNet",
+  "stats": {
+    "degree": 8,
+    "inbound": 5,
+    "outbound": 3
+  },
+  "summary": "GDN 是一种线性序列建模块，在 [HyLo](/concepts/HyLo.md) 混合架构中作为 [Mamba2](/entities/Mamba.md) 的替代方案使用。它通过门控 delta 规则递推实现 O(n) 复杂度的序列建模。",
+  "tags": [
+    "linear-attention",
+    "SSM",
+    "GDN"
+  ],
+  "title": "Gated DeltaNet"
+}

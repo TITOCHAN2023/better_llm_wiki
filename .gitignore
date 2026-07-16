@@ -1,0 +1,20 @@
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Per-wiki derived caches — regenerable by lint_wiki.py / index_wiki.py.
+# (graph/ and *.md.graph are committed for demo-wiki so the viewer works on clone.)
+.query-index/
+.graph-cache/
+
+# Editor
+*.swp
+*~

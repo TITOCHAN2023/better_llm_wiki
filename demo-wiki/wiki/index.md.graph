@@ -1,0 +1,84 @@
+{
+  "breadcrumb": [
+    "wiki",
+    "索引 — LLM Research"
+  ],
+  "displayName": "索引 — LLM Research",
+  "ego": {
+    "in": [],
+    "out": [
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Agent Context Compilation.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Bounded-Memory Agents.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Gated DeltaNet.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/HyLo.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Knowledge Distillation.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Long-Context Training.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Model Upcycling.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Multi-Head Latent Attention.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/entities/AgenticSTS.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/entities/Mamba.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/entities/vLLM.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/summaries/acc-compiling-agent-trajectories-long-context-training.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/summaries/agenticsts-bounded-memory-testbed.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/summaries/hylo-long-context-aware-upcycling.md"
+      }
+    ]
+  },
+  "fileName": "index.md",
+  "hash": "sha256:26ab0eac37905cd20c981fc8dfabcd965fd246c02cc92138e00f214bf36d440b",
+  "id": "wiki/index.md",
+  "kind": "index",
+  "parentName": "wiki",
+  "qualifiedName": "索引 — LLM Research",
+  "schema": 1,
+  "shortName": "索引 — LLM Research",
+  "stats": {
+    "degree": 14,
+    "inbound": 0,
+    "outbound": 14
+  },
+  "summary": "> 大语言模型前沿研究知识库，聚焦混合架构、长上下文、高效推理。",
+  "tags": [],
+  "title": "索引 — LLM Research"
+}

@@ -1,0 +1,98 @@
+{
+  "breadcrumb": [
+    "wiki",
+    "concepts",
+    "HyLo"
+  ],
+  "displayName": "HyLo",
+  "ego": {
+    "in": [
+      {
+        "from": "wiki/concepts/Gated DeltaNet.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/concepts/Knowledge Distillation.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/concepts/Long-Context Training.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/concepts/Model Upcycling.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/concepts/Multi-Head Latent Attention.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/entities/Mamba.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/entities/vLLM.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/index.md",
+        "kind": "links_to"
+      }
+    ],
+    "out": [
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Gated DeltaNet.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Knowledge Distillation.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Long-Context Training.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Model Upcycling.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Multi-Head Latent Attention.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/entities/Mamba.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/entities/vLLM.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/summaries/hylo-long-context-aware-upcycling.md"
+      }
+    ]
+  },
+  "fileName": "HyLo.md",
+  "hash": "sha256:bf069321ffcd6d68c39f16a0bd4e9f6a703c44d034b338982386986e5c02ea54",
+  "id": "wiki/concepts/HyLo.md",
+  "kind": "concept",
+  "parentName": "concepts",
+  "qualifiedName": "concepts / HyLo",
+  "schema": 1,
+  "shortName": "HyLo",
+  "stats": {
+    "degree": 16,
+    "inbound": 8,
+    "outbound": 8
+  },
+  "summary": "HyLo（Long-Context Aware Upcycling）是 AMD 提出的一种混合架构升级方法，将预训练的 Transformer 模型转换为高效的混合模型，同时保持短上下文质量并大幅提升长上下文能力。",
+  "tags": [
+    "hybrid-architecture",
+    "upcycling",
+    "long-context"
+  ],
+  "title": "HyLo"
+}

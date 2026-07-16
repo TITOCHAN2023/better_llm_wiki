@@ -1,0 +1,66 @@
+{
+  "breadcrumb": [
+    "wiki",
+    "entities",
+    "Mamba"
+  ],
+  "displayName": "Mamba",
+  "ego": {
+    "in": [
+      {
+        "from": "wiki/concepts/Gated DeltaNet.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/concepts/HyLo.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/index.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/summaries/hylo-long-context-aware-upcycling.md",
+        "kind": "links_to"
+      }
+    ],
+    "out": [
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Gated DeltaNet.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/HyLo.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Model Upcycling.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Multi-Head Latent Attention.md"
+      }
+    ]
+  },
+  "fileName": "Mamba.md",
+  "hash": "sha256:c93e755eae22ae0caeaa8275d8ea9c80e4f22a7d6655bff5f1f9e1b2788de818",
+  "id": "wiki/entities/Mamba.md",
+  "kind": "entity",
+  "parentName": "entities",
+  "qualifiedName": "entities / Mamba",
+  "schema": 1,
+  "shortName": "Mamba",
+  "stats": {
+    "degree": 8,
+    "inbound": 4,
+    "outbound": 4
+  },
+  "summary": "Mamba 是一族基于选择性状态空间模型（Selective SSM）的序列建模架构，以线性复杂度处理长序列。Mamba2 是其改进版本，在 [HyLo](/concepts/HyLo.md) 中作为线性块与 [MLA](</concepts/Multi-Head Latent Attention.md>) 层交替使用。",
+  "tags": [
+    "SSM",
+    "linear-attention",
+    "mamba2"
+  ],
+  "title": "Mamba"
+}

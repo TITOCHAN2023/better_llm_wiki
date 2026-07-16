@@ -1,0 +1,56 @@
+{
+  "breadcrumb": [
+    "wiki",
+    "summaries",
+    "ACC: Compiling Agent Trajectories for Long-Context Training"
+  ],
+  "displayName": "ACC: Compiling Agent Trajectories for Long-Context Training",
+  "ego": {
+    "in": [
+      {
+        "from": "wiki/concepts/Agent Context Compilation.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/index.md",
+        "kind": "links_to"
+      }
+    ],
+    "out": [
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Agent Context Compilation.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Knowledge Distillation.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Long-Context Training.md"
+      }
+    ]
+  },
+  "fileName": "acc-compiling-agent-trajectories-long-context-training.md",
+  "hash": "sha256:be1c3773a20f1be03d675a4dd80a5f01aec756b25ed58391475896e5166c57d5",
+  "id": "wiki/summaries/acc-compiling-agent-trajectories-long-context-training.md",
+  "kind": "summary",
+  "parentName": "summaries",
+  "qualifiedName": "summaries / ACC: Compiling Agent Trajectories for Long-Context Training",
+  "schema": 1,
+  "shortName": "ACC: Compiling Agent Trajectories for Long-Context Training",
+  "stats": {
+    "degree": 5,
+    "inbound": 2,
+    "outbound": 3
+  },
+  "summary": "来源：arXiv:2605.21850（2026-05-21），University of Science and Technology of China / Shanghai AI Laboratory。",
+  "tags": [
+    "long-context",
+    "agent-training",
+    "SFT",
+    "MRCR",
+    "GraphWalks"
+  ],
+  "title": "ACC: Compiling Agent Trajectories for Long-Context Training"
+}

@@ -1,0 +1,17 @@
+{
+  "adjacencyFile": "adjacency.graph",
+  "edgeShards": [
+    "edges-000.graph"
+  ],
+  "generatedAt": "2026-07-16T14:02:12+08:00",
+  "issuesFile": "issues.graph",
+  "lineageFile": "lineage.graph",
+  "navigationFile": "navigation.graph",
+  "nodesFile": "nodes.graph",
+  "recentFile": "recent.graph",
+  "root": "demo-wiki",
+  "schema": 1,
+  "settingsFile": "settings.graph",
+  "statsFile": "stats.graph",
+  "viewFile": "view.graph"
+}

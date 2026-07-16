@@ -1,0 +1,73 @@
+{
+  "breadcrumb": [
+    "wiki",
+    "summaries",
+    "HyLo: 长上下文感知的混合架构升级"
+  ],
+  "displayName": "HyLo: 长上下文感知的混合架构升级",
+  "ego": {
+    "in": [
+      {
+        "from": "wiki/concepts/HyLo.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/index.md",
+        "kind": "links_to"
+      }
+    ],
+    "out": [
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Gated DeltaNet.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Knowledge Distillation.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Long-Context Training.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Model Upcycling.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Multi-Head Latent Attention.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/entities/Mamba.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/entities/vLLM.md"
+      }
+    ]
+  },
+  "fileName": "hylo-long-context-aware-upcycling.md",
+  "hash": "sha256:9dccccc9660736f2aaca1a7dab42ecce27e9b1d1c3dea33ed7e8dd15f7c83522",
+  "id": "wiki/summaries/hylo-long-context-aware-upcycling.md",
+  "kind": "summary",
+  "parentName": "summaries",
+  "qualifiedName": "summaries / HyLo: 长上下文感知的混合架构升级",
+  "schema": 1,
+  "shortName": "HyLo: 长上下文感知的混合架构升级",
+  "stats": {
+    "degree": 9,
+    "inbound": 2,
+    "outbound": 7
+  },
+  "summary": "来源：arXiv:2604.24715（2026-04-27），AMD 研究团队。",
+  "tags": [
+    "hybrid-architecture",
+    "upcycling",
+    "long-context",
+    "MLA",
+    "mamba2",
+    "GDN"
+  ],
+  "title": "HyLo: 长上下文感知的混合架构升级"
+}

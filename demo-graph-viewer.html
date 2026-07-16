@@ -1,0 +1,1197 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LLM Wiki .graph Viewer</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f1ea;
+        --panel: rgba(255, 252, 246, 0.92);
+        --ink: #1e1b18;
+        --muted: #645b52;
+        --line: #d7cdc0;
+        --accent: #b85c38;
+        --concept: #d96c47;
+        --entity: #2f7a72;
+        --summary: #9b6b9e;
+        --page: #768390;
+        --in: #7d8f69;
+        --out: #af5b76;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+        background:
+          radial-gradient(circle at top, rgba(184, 92, 56, 0.08), transparent 34%),
+          linear-gradient(180deg, #f7f3eb 0%, var(--bg) 100%);
+        color: var(--ink);
+      }
+
+      .page {
+        min-height: 100vh;
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        gap: 16px;
+        padding: 24px;
+      }
+
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: end;
+        flex-wrap: wrap;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(28px, 4vw, 42px);
+        line-height: 1;
+        letter-spacing: -0.03em;
+      }
+
+      .hero p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        max-width: 680px;
+      }
+
+      .controls,
+      .meta,
+      .json {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 12px 32px rgba(34, 28, 22, 0.08);
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 1.2fr 2fr auto auto auto auto auto;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      label {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      input {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px 14px;
+        font: inherit;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.85);
+      }
+
+      button {
+        border: 0;
+        border-radius: 14px;
+        padding: 0 18px;
+        font: inherit;
+        font-weight: 700;
+        background: var(--ink);
+        color: #fff9f1;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #37312c;
+      }
+
+      .status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        align-items: center;
+        min-height: 24px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--line);
+      }
+
+      .viewer {
+        min-height: 560px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 300px;
+        gap: 16px;
+      }
+
+      .canvas {
+        position: relative;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 50% 50%, rgba(184, 92, 56, 0.08), transparent 45%),
+          linear-gradient(180deg, rgba(255,255,255,0.72), rgba(247,243,235,0.88));
+      }
+
+      svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .meta,
+      .json {
+        padding: 16px;
+      }
+
+      .meta h2,
+      .json h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+
+      .kv {
+        display: grid;
+        gap: 10px;
+      }
+
+      .kv-row {
+        display: grid;
+        gap: 4px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid rgba(215, 205, 192, 0.6);
+      }
+
+      .kv-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .kv-row strong {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .legend .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        color: #332d28;
+      }
+
+      .node-label {
+        font-size: 13px;
+        fill: var(--ink);
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        text-anchor: middle;
+      }
+
+      .node-circle {
+        stroke: rgba(30, 27, 24, 0.16);
+        stroke-width: 1.5px;
+      }
+
+      .node-center {
+        filter: drop-shadow(0 10px 18px rgba(34, 28, 22, 0.18));
+      }
+
+      .edge {
+        stroke: rgba(75, 63, 52, 0.42);
+        stroke-width: 1.6px;
+      }
+
+      .edge.inbound {
+        stroke: color-mix(in srgb, var(--in) 72%, white);
+      }
+
+      .edge.outbound {
+        stroke: color-mix(in srgb, var(--out) 72%, white);
+      }
+
+      .clickable {
+        cursor: pointer;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 980px) {
+        .controls {
+          grid-template-columns: 1fr;
+        }
+
+        .viewer {
+          grid-template-columns: 1fr;
+        }
+
+        .canvas {
+          min-height: 460px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="hero">
+        <div>
+          <h1>LLM Wiki `.graph` Viewer</h1>
+          <p>输入基于 `demo-wiki` 的相对路径，直接加载页面 sidecar 和全局节点索引，检查私有协议是否能正确读出局部图。</p>
+        </div>
+        <div class="status" id="status"></div>
+      </section>
+
+      <section class="controls">
+        <div class="field">
+          <label for="rootInput">Wiki Root</label>
+          <input id="rootInput" value="demo-wiki" />
+        </div>
+        <div class="field">
+          <label for="pageInput">Page Path</label>
+          <input id="pageInput" value="wiki/concepts/HyLo.md" />
+        </div>
+        <button id="loadBtn" type="button">Page</button>
+        <button id="knowledgeBtn" type="button">Knowledge</button>
+        <button id="recentBtn" type="button">Recent</button>
+        <button id="navigationBtn" type="button">Navigation</button>
+        <button id="lineageBtn" type="button">Lineage</button>
+      </section>
+
+      <section class="viewer">
+        <div class="canvas controls" style="padding: 0;">
+          <svg id="graphSvg" viewBox="0 0 980 620" aria-label="graph"></svg>
+        </div>
+        <div style="display: grid; gap: 16px;">
+          <aside class="meta">
+            <h2>Node Meta</h2>
+            <div class="kv" id="metaPanel"></div>
+            <div class="legend">
+              <span class="pill"><span class="dot" style="background: var(--concept);"></span>concept</span>
+              <span class="pill"><span class="dot" style="background: var(--entity);"></span>entity</span>
+              <span class="pill"><span class="dot" style="background: var(--summary);"></span>summary</span>
+              <span class="pill"><span class="dot" style="background: var(--page);"></span>page</span>
+              <span class="pill"><span class="dot" style="background: var(--ink);"></span>log/raw/index</span>
+            </div>
+            <p class="hint" style="margin: 12px 0 0;">点击邻居节点会直接加载那个页面的局部图。</p>
+          </aside>
+
+          <aside class="json">
+            <h2>Raw Sidecar</h2>
+            <pre id="jsonPanel">等待加载…</pre>
+          </aside>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const statusEl = document.getElementById("status");
+      const metaPanelEl = document.getElementById("metaPanel");
+      const jsonPanelEl = document.getElementById("jsonPanel");
+      const svgEl = document.getElementById("graphSvg");
+      const rootInput = document.getElementById("rootInput");
+      const pageInput = document.getElementById("pageInput");
+      const loadBtn = document.getElementById("loadBtn");
+      const knowledgeBtn = document.getElementById("knowledgeBtn");
+      const recentBtn = document.getElementById("recentBtn");
+      const navigationBtn = document.getElementById("navigationBtn");
+      const lineageBtn = document.getElementById("lineageBtn");
+      const viewButtons = [loadBtn, knowledgeBtn, recentBtn, navigationBtn, lineageBtn];
+
+      function escapeHtml(text) {
+        return text
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      function normalizeRoot(root) {
+        return (root || "").trim().replace(/\/+$/, "");
+      }
+
+      function normalizePagePath(path) {
+        let out = (path || "").trim();
+        if (!out) return "";
+        if (out.endsWith(".graph")) return out;
+        if (!out.endsWith(".md")) out += ".md";
+        return out;
+      }
+
+      function sidecarPath(root, pagePath) {
+        const normalizedRoot = normalizeRoot(root);
+        const normalizedPage = normalizePagePath(pagePath);
+        return `${normalizedRoot}/${normalizedPage}.graph`;
+      }
+
+      function graphColor(kind) {
+        switch (kind) {
+          case "recent":
+          case "log":
+          case "raw_source":
+          case "index":
+            return "var(--ink)";
+          case "section":
+            return "var(--accent)";
+          case "concept":
+            return "var(--concept)";
+          case "entity":
+            return "var(--entity)";
+          case "summary":
+            return "var(--summary)";
+          default:
+            return "var(--page)";
+        }
+      }
+
+      function isWikiNodeId(id) {
+        return typeof id === "string" && id.startsWith("wiki/") && id.endsWith(".md");
+      }
+
+      function setStatus(items) {
+        statusEl.innerHTML = items.map((item) => `<span class="pill">${item}</span>`).join("");
+      }
+
+      function setBusy(isBusy) {
+        for (const button of viewButtons) button.disabled = isBusy;
+      }
+
+      function renderMeta(sidecar, manifest) {
+        const rows = [
+          ["id", sidecar.id],
+          ["title", sidecar.title],
+          ["display", sidecar.displayName || sidecar.title || sidecar.id],
+          ["qualified", sidecar.qualifiedName || sidecar.id],
+          ["breadcrumb", (sidecar.breadcrumb || []).join(" / ") || "—"],
+          ["kind", sidecar.kind],
+          ["hash", sidecar.hash],
+          ["stats", `in ${sidecar.stats.inbound} / out ${sidecar.stats.outbound} / degree ${sidecar.stats.degree}`],
+          ["manifest", manifest ? `${manifest.root} · schema ${manifest.schema}` : "not loaded"],
+          ["summary", sidecar.summary || "—"],
+          ["tags", (sidecar.tags || []).join(", ") || "—"],
+        ];
+
+        metaPanelEl.innerHTML = rows
+          .map(([k, v]) => `
+            <div class="kv-row">
+              <strong>${escapeHtml(k)}</strong>
+              <div>${escapeHtml(String(v))}</div>
+            </div>
+          `)
+          .join("");
+      }
+
+      function renderGraph(sidecar, nodesById) {
+        const width = 980;
+        const height = 620;
+        const cx = width / 2;
+        const cy = height / 2;
+        const inbound = sidecar.ego?.in || [];
+        const outbound = sidecar.ego?.out || [];
+        const allNeighborIds = Array.from(new Set([
+          ...inbound.map((item) => item.from),
+          ...outbound.map((item) => item.to),
+        ]));
+
+        const neighbors = allNeighborIds.map((id) => nodesById.get(id) || {
+          id,
+          title: id.split("/").pop()?.replace(/\.md$/, "") || id,
+          displayName: id.split("/").pop()?.replace(/\.md$/, "") || id,
+          kind: "page",
+        });
+
+        const positions = new Map();
+        positions.set(sidecar.id, { x: cx, y: cy });
+
+        const inboundIds = new Set(inbound.map((item) => item.from));
+        const outboundIds = new Set(outbound.map((item) => item.to));
+        const ringRadiusX = 330;
+        const ringRadiusY = 200;
+
+        neighbors.forEach((node, index) => {
+          const angle = (-Math.PI / 2) + (index / Math.max(neighbors.length, 1)) * Math.PI * 2;
+          let x = cx + Math.cos(angle) * ringRadiusX;
+          let y = cy + Math.sin(angle) * ringRadiusY;
+
+          if (inboundIds.has(node.id) && !outboundIds.has(node.id)) x -= 70;
+          if (outboundIds.has(node.id) && !inboundIds.has(node.id)) x += 70;
+
+          positions.set(node.id, { x, y });
+        });
+
+        const markerDefs = `
+          <defs>
+            <marker id="arrowOut" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L9,3 z" fill="var(--out)"></path>
+            </marker>
+            <marker id="arrowIn" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L9,3 z" fill="var(--in)"></path>
+            </marker>
+          </defs>
+        `;
+
+        const edgeLines = [];
+        for (const item of inbound) {
+          const from = positions.get(item.from);
+          const to = positions.get(sidecar.id);
+          if (!from || !to) continue;
+          edgeLines.push(`
+            <line
+              class="edge inbound"
+              x1="${from.x}" y1="${from.y}"
+              x2="${to.x}" y2="${to.y}"
+              marker-end="url(#arrowIn)">
+            </line>
+          `);
+        }
+        for (const item of outbound) {
+          const from = positions.get(sidecar.id);
+          const to = positions.get(item.to);
+          if (!from || !to) continue;
+          edgeLines.push(`
+            <line
+              class="edge outbound"
+              x1="${from.x}" y1="${from.y}"
+              x2="${to.x}" y2="${to.y}"
+              marker-end="url(#arrowOut)">
+            </line>
+          `);
+        }
+
+        const nodesMarkup = [];
+        for (const node of neighbors) {
+          const pos = positions.get(node.id);
+          const title = escapeHtml(node.displayName || node.title || node.id);
+          const kind = escapeHtml(node.kind || "page");
+          const encoded = encodeURIComponent(node.id);
+          nodesMarkup.push(`
+            <g class="clickable" data-node-id="${encoded}" transform="translate(${pos.x}, ${pos.y})">
+              <circle class="node-circle" r="26" fill="${graphColor(node.kind)}"></circle>
+              <text class="node-label" y="-38">${title}</text>
+              <text class="node-label" y="5" style="font-size: 11px; fill: rgba(30,27,24,0.76);">${kind}</text>
+            </g>
+          `);
+        }
+
+        const centerTitle = escapeHtml(sidecar.displayName || sidecar.title || sidecar.id);
+        const centerKind = escapeHtml(sidecar.kind || "page");
+        const centerNode = `
+          <g class="node-center" transform="translate(${cx}, ${cy})">
+            <circle class="node-circle" r="44" fill="${graphColor(sidecar.kind)}"></circle>
+            <text class="node-label" y="-62" style="font-size: 16px; font-weight: 700;">${centerTitle}</text>
+            <text class="node-label" y="6" style="font-size: 12px; fill: rgba(30,27,24,0.78);">${centerKind}</text>
+          </g>
+        `;
+
+        svgEl.innerHTML = `${markerDefs}${edgeLines.join("")}${nodesMarkup.join("")}${centerNode}`;
+
+        svgEl.querySelectorAll("[data-node-id]").forEach((el) => {
+          el.addEventListener("click", () => {
+            const nodeId = decodeURIComponent(el.getAttribute("data-node-id"));
+            pageInput.value = nodeId;
+            void loadGraph();
+          });
+        });
+      }
+
+      function renderRecentMeta(recent, manifest) {
+        const window = recent.window || {};
+        const datesByBucket = window.datesByBucket || {};
+        const touched = (recent.nodes || []).filter((node) => isWikiNodeId(node.id)).length;
+        const rows = [
+          ["view", "recent activity buckets"],
+          ["entries", (recent.entries || []).length],
+          ["recent dates", (datesByBucket.recent || []).join(", ") || "—"],
+          ["lastweek dates", (datesByBucket.lastweek || []).join(", ") || "—"],
+          ["floating dates", (datesByBucket.floating || []).join(", ") || "—"],
+          ["touched nodes", touched],
+          ["manifest", manifest ? `${manifest.root} · schema ${manifest.schema}` : "not loaded"],
+          ["legend", "recent: 0-7d, lastweek: 7-14d, floating: 14-21d"],
+        ];
+
+        metaPanelEl.innerHTML = rows
+          .map(([k, v]) => `
+            <div class="kv-row">
+              <strong>${escapeHtml(k)}</strong>
+              <div>${escapeHtml(String(v))}</div>
+            </div>
+          `)
+          .join("");
+      }
+
+      function renderDatasetMeta(label, dataset, manifest) {
+        const rows = [
+          ["view", label],
+          ["nodes", (dataset.nodes || []).length],
+          ["edges", (dataset.edges || []).length],
+          ["manifest", manifest ? `${manifest.root} · schema ${manifest.schema}` : "not loaded"],
+        ];
+
+        metaPanelEl.innerHTML = rows
+          .map(([k, v]) => `
+            <div class="kv-row">
+              <strong>${escapeHtml(k)}</strong>
+              <div>${escapeHtml(String(v))}</div>
+            </div>
+          `)
+          .join("");
+      }
+
+      function renderKnowledgeMeta(nodes, edges, settings, manifest) {
+        const byKind = new Map();
+        for (const node of nodes) byKind.set(node.kind || "page", (byKind.get(node.kind || "page") || 0) + 1);
+        const topNode = [...nodes].sort((a, b) => (b.degree || 0) - (a.degree || 0))[0];
+        const rows = [
+          ["view", "knowledge graph"],
+          ["nodes", nodes.length],
+          ["edges", edges.length],
+          ["top node", topNode ? `${topNode.displayName || topNode.title || topNode.id} · degree ${topNode.degree || 0}` : "—"],
+          ["kinds", [...byKind.entries()].map(([k, v]) => `${k} ${v}`).join(", ") || "—"],
+          ["layout", settings?.layout?.knowledge?.engine || "centrality"],
+          ["manifest", manifest ? `${manifest.root} · schema ${manifest.schema}` : "not loaded"],
+        ];
+
+        metaPanelEl.innerHTML = rows
+          .map(([k, v]) => `
+            <div class="kv-row">
+              <strong>${escapeHtml(k)}</strong>
+              <div>${escapeHtml(String(v))}</div>
+            </div>
+          `)
+          .join("");
+      }
+
+      function renderNodeInspector(node, incidentEdges) {
+        const rows = [
+          ["id", node.id],
+          ["display", node.displayName || node.title || node.id],
+          ["qualified", node.qualifiedName || node.id],
+          ["kind", node.kind || "page"],
+          ["degree", node.degree || incidentEdges.length || 0],
+          ["in/out", `in ${node.inbound || 0} / out ${node.outbound || 0}`],
+          ["breadcrumb", (node.breadcrumb || []).join(" / ") || "—"],
+          ["summary", node.summary || "—"],
+          ["tags", (node.tags || []).join(", ") || "—"],
+        ];
+
+        metaPanelEl.innerHTML = rows
+          .map(([k, v]) => `
+            <div class="kv-row">
+              <strong>${escapeHtml(k)}</strong>
+              <div>${escapeHtml(String(v))}</div>
+            </div>
+          `)
+          .join("");
+      }
+
+      function hashUnit(text) {
+        let hash = 2166136261;
+        for (let i = 0; i < text.length; i++) {
+          hash ^= text.charCodeAt(i);
+          hash = Math.imul(hash, 16777619);
+        }
+        return (hash >>> 0) / 4294967295;
+      }
+
+      function affinity(settings, sourceKind, targetKind) {
+        const value = settings?.typeAffinity?.[sourceKind]?.[targetKind];
+        return typeof value === "number" ? value : 1;
+      }
+
+      function knowledgeRadius(node, score, maxScore) {
+        const centrality = maxScore > 0 ? score / maxScore : 0;
+        return Math.round(13 + Math.sqrt(node.degree || 1) * 3.2 + centrality * 12);
+      }
+
+      function computeKnowledgeLayout(nodes, edges, settings) {
+        const width = 980;
+        const height = 620;
+        const cx = width / 2;
+        const cy = height / 2;
+        const nodeById = new Map(nodes.map((node) => [node.id, node]));
+        const scores = new Map(nodes.map((node) => [
+          node.id,
+          (node.degree || 0) + (node.inbound || 0) * 0.8 + (node.outbound || 0) * 0.5,
+        ]));
+
+        for (const edge of edges) {
+          const source = nodeById.get(edge.s);
+          const target = nodeById.get(edge.t);
+          if (!source || !target) continue;
+          const weight = (edge.w || 1) * affinity(settings, source.kind || "page", target.kind || "page");
+          scores.set(edge.s, (scores.get(edge.s) || 0) + weight * 0.45);
+          scores.set(edge.t, (scores.get(edge.t) || 0) + weight * 0.45);
+        }
+
+        const sorted = [...nodes].sort((a, b) => {
+          const scoreDiff = (scores.get(b.id) || 0) - (scores.get(a.id) || 0);
+          return scoreDiff || String(a.id).localeCompare(String(b.id));
+        });
+        const maxScore = Math.max(1, ...sorted.map((node) => scores.get(node.id) || 0));
+        const kindAngles = {
+          concept: -Math.PI / 2,
+          entity: Math.PI / 9,
+          summary: Math.PI * 0.78,
+          page: Math.PI * 1.28,
+          synthesis: Math.PI * 1.65,
+        };
+        const positions = new Map();
+
+        sorted.forEach((node, index) => {
+          const score = scores.get(node.id) || 0;
+          const centrality = score / maxScore;
+          if (index === 0) {
+            positions.set(node.id, { x: cx, y: cy });
+            return;
+          }
+          const baseAngle = kindAngles[node.kind] ?? Math.PI * 1.5;
+          const jitter = (hashUnit(node.id) - 0.5) * Math.PI * 0.72;
+          const angle = baseAngle + jitter + index * 0.19;
+          const radius = 82 + (1 - centrality) * 260 + Math.floor(index / 8) * 34;
+          positions.set(node.id, {
+            x: cx + Math.cos(angle) * radius,
+            y: cy + Math.sin(angle) * radius * 0.68,
+          });
+        });
+
+        const simNodes = new Map(sorted.map((node) => {
+          const pos = positions.get(node.id);
+          return [node.id, { node, x: pos.x, y: pos.y }];
+        }));
+        const iterations = nodes.length <= 120 ? 90 : 35;
+        for (let step = 0; step < iterations; step++) {
+          const alpha = 1 - step / iterations;
+          for (const edge of edges) {
+            const source = simNodes.get(edge.s);
+            const target = simNodes.get(edge.t);
+            if (!source || !target) continue;
+            const sourceScore = scores.get(edge.s) || 0;
+            const targetScore = scores.get(edge.t) || 0;
+            const desired = 88 + (1 - Math.min(sourceScore, targetScore) / maxScore) * 150;
+            const dx = target.x - source.x;
+            const dy = target.y - source.y;
+            const dist = Math.max(1, Math.hypot(dx, dy));
+            const pull = ((dist - desired) / dist) * 0.018 * (edge.w || 1) * alpha;
+            const ox = dx * pull;
+            const oy = dy * pull;
+            source.x += ox;
+            source.y += oy;
+            target.x -= ox;
+            target.y -= oy;
+          }
+
+          const values = [...simNodes.values()];
+          for (let i = 0; i < values.length; i++) {
+            for (let j = i + 1; j < values.length; j++) {
+              const a = values[i];
+              const b = values[j];
+              const dx = b.x - a.x;
+              const dy = b.y - a.y;
+              const dist = Math.max(1, Math.hypot(dx, dy));
+              const minDist = knowledgeRadius(a.node, scores.get(a.node.id) || 0, maxScore) + knowledgeRadius(b.node, scores.get(b.node.id) || 0, maxScore) + 22;
+              if (dist >= minDist) continue;
+              const push = ((minDist - dist) / dist) * 0.045 * alpha;
+              const ox = dx * push;
+              const oy = dy * push;
+              a.x -= ox;
+              a.y -= oy;
+              b.x += ox;
+              b.y += oy;
+            }
+          }
+        }
+
+        for (const [id, item] of simNodes.entries()) {
+          positions.set(id, {
+            x: Math.max(60, Math.min(width - 60, item.x)),
+            y: Math.max(70, Math.min(height - 60, item.y)),
+          });
+        }
+
+        return { positions, scores, maxScore };
+      }
+
+      function renderKnowledgeGraph(nodes, edges, settings) {
+        const nodeById = new Map(nodes.map((node) => [node.id, node]));
+        const visibleEdges = edges.filter((edge) => nodeById.has(edge.s) && nodeById.has(edge.t));
+        const incident = new Map(nodes.map((node) => [node.id, []]));
+        for (const edge of visibleEdges) {
+          incident.get(edge.s)?.push(edge);
+          incident.get(edge.t)?.push(edge);
+        }
+
+        const { positions, scores, maxScore } = computeKnowledgeLayout(nodes, visibleEdges, settings);
+        const markerDefs = `
+          <defs>
+            <marker id="arrowKnowledge" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" fill="rgba(75,63,52,0.42)"></path>
+            </marker>
+          </defs>
+        `;
+
+        const edgeLines = visibleEdges.map((edge) => {
+          const from = positions.get(edge.s);
+          const to = positions.get(edge.t);
+          if (!from || !to) return "";
+          const source = nodeById.get(edge.s);
+          const target = nodeById.get(edge.t);
+          const edgeAffinity = affinity(settings, source.kind || "page", target.kind || "page");
+          const weight = Math.max(1, edge.w || 1);
+          const strokeWidth = Math.min(0.8 + Math.sqrt(weight * edgeAffinity) * 0.9, 4.2);
+          const opacity = Math.min(0.18 + weight * 0.08 + edgeAffinity * 0.08, 0.62).toFixed(2);
+          return `
+            <line
+              class="edge knowledge-edge"
+              data-source="${escapeHtml(edge.s)}"
+              data-target="${escapeHtml(edge.t)}"
+              x1="${from.x}" y1="${from.y}"
+              x2="${to.x}" y2="${to.y}"
+              marker-end="url(#arrowKnowledge)"
+              style="stroke-width:${strokeWidth}px;opacity:${opacity};">
+            </line>
+          `;
+        });
+
+        const nodeMarkup = nodes.map((node) => {
+          const pos = positions.get(node.id);
+          if (!pos) return "";
+          const score = scores.get(node.id) || 0;
+          const r = knowledgeRadius(node, score, maxScore);
+          const encoded = encodeURIComponent(node.id);
+          const title = escapeHtml(node.displayName || node.title || node.id);
+          const kind = escapeHtml(node.kind || "page");
+          const labelOffset = r + 14;
+          return `
+            <g class="clickable knowledge-node" data-node-id="${encoded}" transform="translate(${pos.x}, ${pos.y})">
+              <circle class="node-circle" r="${r}" fill="${graphColor(node.kind)}"></circle>
+              <text class="node-label" y="-${labelOffset}" style="font-weight:${score === maxScore ? 800 : 600};">${title}</text>
+              <text class="node-label" y="5" style="font-size: 11px; fill: rgba(30,27,24,0.76);">${kind}</text>
+            </g>
+          `;
+        });
+
+        svgEl.innerHTML = `${markerDefs}${edgeLines.join("")}${nodeMarkup.join("")}`;
+
+        svgEl.querySelectorAll(".knowledge-node").forEach((el) => {
+          el.addEventListener("mouseenter", () => {
+            const nodeId = decodeURIComponent(el.getAttribute("data-node-id"));
+            const neighbors = new Set([nodeId]);
+            for (const edge of incident.get(nodeId) || []) {
+              neighbors.add(edge.s);
+              neighbors.add(edge.t);
+            }
+            svgEl.querySelectorAll(".knowledge-node").forEach((nodeEl) => {
+              const id = decodeURIComponent(nodeEl.getAttribute("data-node-id"));
+              nodeEl.style.opacity = neighbors.has(id) ? "1" : "0.22";
+            });
+            svgEl.querySelectorAll(".knowledge-edge").forEach((edgeEl) => {
+              const source = edgeEl.getAttribute("data-source");
+              const target = edgeEl.getAttribute("data-target");
+              edgeEl.style.opacity = source === nodeId || target === nodeId ? "0.88" : "0.05";
+            });
+          });
+          el.addEventListener("mouseleave", () => {
+            svgEl.querySelectorAll(".knowledge-node").forEach((nodeEl) => {
+              nodeEl.style.opacity = "";
+            });
+            svgEl.querySelectorAll(".knowledge-edge").forEach((edgeEl) => {
+              edgeEl.style.opacity = "";
+            });
+          });
+          el.addEventListener("click", () => {
+            const nodeId = decodeURIComponent(el.getAttribute("data-node-id"));
+            const node = nodeById.get(nodeId);
+            if (!node) return;
+            renderNodeInspector(node, incident.get(nodeId) || []);
+            if (isWikiNodeId(nodeId)) pageInput.value = nodeId;
+          });
+          el.addEventListener("dblclick", () => {
+            const nodeId = decodeURIComponent(el.getAttribute("data-node-id"));
+            if (!isWikiNodeId(nodeId)) return;
+            pageInput.value = nodeId;
+            void loadGraph();
+          });
+        });
+      }
+
+      function renderLayeredGraph(dataset, mode) {
+        const width = 980;
+        const height = 620;
+        const nodes = dataset.nodes || [];
+        const edges = dataset.edges || [];
+        const positions = new Map();
+
+        const columns = mode === "lineage"
+          ? [
+              { x: 160, kinds: new Set(["raw_source"]) },
+              { x: 430, kinds: new Set(["summary"]) },
+              { x: 740, kinds: new Set(["concept", "entity", "synthesis", "page", "index"]) },
+            ]
+          : [
+              { x: 150, kinds: new Set(["index"]) },
+              { x: 410, kinds: new Set(["section"]) },
+              { x: 740, kinds: new Set(["concept", "entity", "summary", "synthesis", "page"]) },
+            ];
+
+        const grouped = columns.map((column) => nodes.filter((node) => column.kinds.has(node.kind)));
+        const assigned = new Set(grouped.flat().map((node) => node.id));
+        const leftovers = nodes.filter((node) => !assigned.has(node.id));
+        if (leftovers.length) grouped[grouped.length - 1].push(...leftovers);
+
+        grouped.forEach((group, columnIndex) => {
+          const step = height / Math.max(group.length + 1, 2);
+          group.forEach((node, index) => {
+            positions.set(node.id, { x: columns[columnIndex].x, y: step * (index + 1) });
+          });
+        });
+
+        const edgeLines = edges.map((edge) => {
+          const from = positions.get(edge.s);
+          const to = positions.get(edge.t);
+          if (!from || !to) return "";
+          return `
+            <line
+              class="edge outbound"
+              x1="${from.x}" y1="${from.y}"
+              x2="${to.x}" y2="${to.y}">
+            </line>
+          `;
+        });
+
+        const nodeMarkup = nodes.map((node) => {
+          const pos = positions.get(node.id);
+          if (!pos) return "";
+          const encoded = encodeURIComponent(node.id);
+          const clickable = node.id.startsWith("wiki/") && node.id.endsWith(".md");
+          const attrs = clickable ? `class="clickable" data-node-id="${encoded}"` : "";
+          return `
+            <g ${attrs} transform="translate(${pos.x}, ${pos.y})">
+              <circle class="node-circle" r="26" fill="${graphColor(node.kind)}"></circle>
+              <text class="node-label" y="-38">${escapeHtml(node.displayName || node.title || node.id)}</text>
+              <text class="node-label" y="5" style="font-size: 11px; fill: rgba(30,27,24,0.76);">${escapeHtml(node.kind || "page")}</text>
+            </g>
+          `;
+        });
+
+        svgEl.innerHTML = `${edgeLines.join("")}${nodeMarkup.join("")}`;
+        svgEl.querySelectorAll("[data-node-id]").forEach((el) => {
+          el.addEventListener("click", () => {
+            const nodeId = decodeURIComponent(el.getAttribute("data-node-id"));
+            pageInput.value = nodeId;
+            void loadGraph();
+          });
+        });
+      }
+
+      function renderRecentGraph(recent) {
+        const width = 980;
+        const height = 620;
+        const allNodes = recent.nodes || [];
+        const allEdges = recent.edges || [];
+        const controlNodes = allNodes.filter((node) => node.id === "recent" || node.id === "lastweek");
+        const pageNodes = allNodes.filter((node) => node.id !== "recent" && node.id !== "lastweek");
+        const pageById = new Map(pageNodes.map((node) => [node.id, node]));
+        const positions = new Map();
+
+        const controlY = { recent: 210, lastweek: 410 };
+        controlNodes.forEach((node) => {
+          positions.set(node.id, { x: 190, y: controlY[node.id] || height / 2 });
+        });
+
+        const floatingNodes = pageNodes.filter((node) => node.bucket === "floating");
+        const connectedNodes = pageNodes.filter((node) => node.bucket !== "floating");
+        const connectedStep = height / Math.max(connectedNodes.length + 1, 2);
+        connectedNodes.forEach((node, i) => {
+          positions.set(node.id, { x: 680, y: connectedStep * (i + 1) });
+        });
+        const floatingStep = height / Math.max(floatingNodes.length + 1, 2);
+        floatingNodes.forEach((node, i) => {
+          positions.set(node.id, { x: 780, y: floatingStep * (i + 1) });
+        });
+
+        function edgeStroke(d) {
+          const t = 1.0 - (d ?? 1);
+          const r = Math.round(120 + t * 95);
+          const g = Math.round(65 + t * 130);
+          const b = Math.round(38 + t * 140);
+          const a = (0.82 - t * 0.46).toFixed(2);
+          return `rgba(${r}, ${g}, ${b}, ${a})`;
+        }
+
+        const edgeLines = allEdges.map((edge) => {
+          const from = positions.get(edge.s);
+          const to = positions.get(edge.t);
+          if (!from || !to) return "";
+          const sw = Math.min(1.4 + (edge.w - 1) * 0.5, 4.5);
+          return `<line class="edge" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" style="stroke:${edgeStroke(edge.d)};stroke-width:${sw}px;"></line>`;
+        });
+
+        const controlMarkup = controlNodes.map((node) => {
+          const entries = node.entries || [];
+          const pos = positions.get(node.id);
+          const depth = node.d ?? 1;
+          const opacity = Math.max(depth, 0.46).toFixed(2);
+          const r = Math.min(32 + entries.length * 3, 50);
+          const ops = [...new Set(entries.map((entry) => entry.op))];
+          const sub = ops.slice(0, 3).join(", ") + (ops.length > 3 ? "…" : "");
+          const label = `${node.displayName || node.id} (${entries.length})`;
+          return `
+            <g transform="translate(${pos.x}, ${pos.y})" style="opacity:${opacity}">
+              <circle class="node-circle" r="${r}" fill="${graphColor(node.kind)}"></circle>
+              <text class="node-label" y="-${r + 12}">${escapeHtml(label)}</text>
+              <text class="node-label" y="5" style="font-size: 11px; fill: rgba(255,249,241,0.84);">${escapeHtml(sub)}</text>
+            </g>
+          `;
+        });
+
+        const pageMarkup = pageNodes.map((node) => {
+          const pos = positions.get(node.id);
+          const encoded = encodeURIComponent(node.id);
+          const bucket = node.bucket || "recent";
+          const opacity = bucket === "floating" ? 0.76 : 1;
+          const r = bucket === "floating" ? 21 : 26;
+          return `
+            <g class="clickable" data-node-id="${encoded}" transform="translate(${pos.x}, ${pos.y})" style="opacity:${opacity}">
+              <circle class="node-circle" r="${r}" fill="${graphColor(node.kind)}"></circle>
+              <text class="node-label" y="-38">${escapeHtml(node.displayName || node.title || node.id)}</text>
+              <text class="node-label" y="5" style="font-size: 11px; fill: rgba(30,27,24,0.76);">${escapeHtml(bucket)}</text>
+            </g>
+          `;
+        });
+
+        svgEl.innerHTML = `${edgeLines.join("")}${controlMarkup.join("")}${pageMarkup.join("")}`;
+        svgEl.querySelectorAll("[data-node-id]").forEach((el) => {
+          el.addEventListener("click", () => {
+            const nodeId = decodeURIComponent(el.getAttribute("data-node-id"));
+            pageInput.value = nodeId;
+            void loadGraph();
+          });
+        });
+      }
+
+      async function tryLoadJson(path) {
+        const res = await fetch(path, { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error(`${path} -> ${res.status}`);
+        }
+        return res.json();
+      }
+
+      async function loadGraph() {
+        const root = normalizeRoot(rootInput.value);
+        const pagePath = normalizePagePath(pageInput.value);
+        const sidecarUrl = sidecarPath(root, pagePath);
+
+        setStatus([`loading ${escapeHtml(sidecarUrl)}`]);
+        setBusy(true);
+        jsonPanelEl.textContent = "加载中…";
+        metaPanelEl.innerHTML = "";
+
+        try {
+          const sidecar = await tryLoadJson(sidecarUrl);
+
+          let manifest = null;
+          let nodes = [];
+          try {
+            manifest = await tryLoadJson(`${root}/graph/manifest.graph`);
+            nodes = await tryLoadJson(`${root}/graph/${manifest.nodesFile}`);
+          } catch (err) {
+            console.warn("global graph files unavailable", err);
+          }
+
+          const nodesById = new Map((nodes || []).map((node) => [node.id, node]));
+          renderMeta(sidecar, manifest);
+          renderGraph(sidecar, nodesById);
+          jsonPanelEl.textContent = JSON.stringify(sidecar, null, 2);
+
+          const neighborCount = new Set([
+            ...(sidecar.ego?.in || []).map((item) => item.from),
+            ...(sidecar.ego?.out || []).map((item) => item.to),
+          ]).size;
+
+          setStatus([
+            `page ${escapeHtml(sidecar.displayName || sidecar.id)}`,
+            `kind ${escapeHtml(sidecar.kind)}`,
+            `neighbors ${neighborCount}`,
+            `global nodes ${(nodes || []).length}`,
+          ]);
+        } catch (err) {
+          svgEl.innerHTML = "";
+          jsonPanelEl.textContent = String(err);
+          setStatus([`load failed`, escapeHtml(String(err))]);
+          metaPanelEl.innerHTML = `
+            <div class="kv-row">
+              <strong>tip</strong>
+              <div>请从仓库根目录起一个静态 server，再访问这个 html。比如：<code>python3 -m http.server 4173</code></div>
+            </div>
+          `;
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function loadRecentGraph() {
+        const root = normalizeRoot(rootInput.value);
+        setStatus([`loading ${escapeHtml(root)}/graph/recent.graph`]);
+        setBusy(true);
+        jsonPanelEl.textContent = "加载中…";
+        metaPanelEl.innerHTML = "";
+
+        try {
+          const manifest = await tryLoadJson(`${root}/graph/manifest.graph`);
+          const recent = await tryLoadJson(`${root}/graph/${manifest.recentFile || "recent.graph"}`);
+          renderRecentMeta(recent, manifest);
+          renderRecentGraph(recent);
+          jsonPanelEl.textContent = JSON.stringify(recent, null, 2);
+          setStatus([
+            `recent entries ${(recent.entries || []).length}`,
+            `recent nodes ${(recent.nodes || []).length}`,
+            `recent edges ${(recent.edges || []).length}`,
+          ]);
+        } catch (err) {
+          svgEl.innerHTML = "";
+          jsonPanelEl.textContent = String(err);
+          setStatus([`load failed`, escapeHtml(String(err))]);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function loadKnowledgeGraph() {
+        const root = normalizeRoot(rootInput.value);
+        setStatus([`loading ${escapeHtml(root)}/graph/nodes.graph + edge shards`]);
+        setBusy(true);
+        jsonPanelEl.textContent = "加载中…";
+        metaPanelEl.innerHTML = "";
+
+        try {
+          const manifest = await tryLoadJson(`${root}/graph/manifest.graph`);
+          const nodes = await tryLoadJson(`${root}/graph/${manifest.nodesFile || "nodes.graph"}`);
+          const edgeFiles = Array.isArray(manifest.edgeShards) && manifest.edgeShards.length
+            ? manifest.edgeShards
+            : ["edges-000.graph"];
+          const edgeShards = await Promise.all(
+            edgeFiles.map((file) => tryLoadJson(`${root}/graph/${file}`)),
+          );
+          const edges = edgeShards.flat();
+          let settings = {};
+          try {
+            settings = await tryLoadJson(`${root}/graph/${manifest.settingsFile || "settings.graph"}`);
+          } catch (err) {
+            console.warn("settings graph unavailable", err);
+          }
+
+          renderKnowledgeMeta(nodes, edges, settings, manifest);
+          renderKnowledgeGraph(nodes, edges, settings);
+          jsonPanelEl.textContent = JSON.stringify({ manifest, settings, nodes, edges }, null, 2);
+          setStatus([
+            `knowledge nodes ${nodes.length}`,
+            `knowledge edges ${edges.length}`,
+            `edge shards ${edgeFiles.length}`,
+          ]);
+        } catch (err) {
+          svgEl.innerHTML = "";
+          jsonPanelEl.textContent = String(err);
+          setStatus([`load failed`, escapeHtml(String(err))]);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function loadGraphDataset(fileKey, fallbackFile, label, mode) {
+        const root = normalizeRoot(rootInput.value);
+        setStatus([`loading ${escapeHtml(root)}/graph/${fallbackFile}`]);
+        setBusy(true);
+        jsonPanelEl.textContent = "加载中…";
+        metaPanelEl.innerHTML = "";
+
+        try {
+          const manifest = await tryLoadJson(`${root}/graph/manifest.graph`);
+          const dataset = await tryLoadJson(`${root}/graph/${manifest[fileKey] || fallbackFile}`);
+          renderDatasetMeta(label, dataset, manifest);
+          renderLayeredGraph(dataset, mode);
+          jsonPanelEl.textContent = JSON.stringify(dataset, null, 2);
+          setStatus([
+            `${label} nodes ${(dataset.nodes || []).length}`,
+            `${label} edges ${(dataset.edges || []).length}`,
+          ]);
+        } catch (err) {
+          svgEl.innerHTML = "";
+          jsonPanelEl.textContent = String(err);
+          setStatus([`load failed`, escapeHtml(String(err))]);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      loadBtn.addEventListener("click", () => {
+        void loadGraph();
+      });
+
+      knowledgeBtn.addEventListener("click", () => {
+        void loadKnowledgeGraph();
+      });
+
+      recentBtn.addEventListener("click", () => {
+        void loadRecentGraph();
+      });
+
+      navigationBtn.addEventListener("click", () => {
+        void loadGraphDataset("navigationFile", "navigation.graph", "navigation", "navigation");
+      });
+
+      lineageBtn.addEventListener("click", () => {
+        void loadGraphDataset("lineageFile", "lineage.graph", "lineage", "lineage");
+      });
+
+      pageInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void loadGraph();
+        }
+      });
+
+      rootInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void loadGraph();
+        }
+      });
+
+      void loadGraph();
+    </script>
+  </body>
+</html>

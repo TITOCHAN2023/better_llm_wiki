@@ -1,0 +1,216 @@
+{
+  "edges": [],
+  "entries": [
+    {
+      "ageDays": 9,
+      "anchor": "12-10-audit-3-agent-context-compilation-bounded-memory-agents-vs-acc-back-edge-3",
+      "body": "",
+      "bucket": "r3",
+      "date": "2026-07-07",
+      "id": "log-entry:20260707-12-10-audit-3-agent-context-compilation-bounded-memory-agents-vs-acc-back-edge-3",
+      "logPath": "log/20260707.md",
+      "nodes": [],
+      "op": "audit",
+      "time": "12:10",
+      "title": "滑动窗口审计 3 轮收敛 — 核心边 Agent Context Compilation ↔ Bounded-Memory Agents 判定为「训练侧 vs 推理侧相补，非矛盾」，无需修复；窗口滑向 ACC 后 back-edge 正确屏蔽，第 3 轮种子为空自然收敛",
+      "touched": []
+    },
+    {
+      "ageDays": 9,
+      "anchor": "12-05-ingest-agenticsts-bounded-memory-testbed-agenticsts-arxiv-2607-02255-bounded-memory-agents-agenticsts-touched-4-pages",
+      "body": "",
+      "bucket": "r3",
+      "date": "2026-07-07",
+      "id": "log-entry:20260707-12-05-ingest-agenticsts-bounded-memory-testbed-agenticsts-arxiv-2607-02255-bounded-memory-agents-agenticsts-touched-4-pages",
+      "logPath": "log/20260707.md",
+      "nodes": [],
+      "op": "ingest",
+      "time": "12:05",
+      "title": "agenticsts-bounded-memory-testbed — AgenticSTS 有界记忆测试床（arXiv 2607.02255），新增 Bounded-Memory Agents 概念页 + AgenticSTS 实体页 + 摘要页 (touched 4 pages)",
+      "touched": []
+    }
+  ],
+  "nodes": [
+    {
+      "ageRange": [
+        0,
+        3
+      ],
+      "bucketIndex": 0,
+      "d": 0.94,
+      "displayName": "Days 0-2",
+      "entries": [],
+      "id": "r0",
+      "kind": "recent",
+      "qualifiedName": "Recent activity / 0-2 days ago"
+    },
+    {
+      "ageRange": [
+        3,
+        6
+      ],
+      "bucketIndex": 1,
+      "d": 0.83,
+      "displayName": "Days 3-5",
+      "entries": [],
+      "id": "r1",
+      "kind": "recent",
+      "qualifiedName": "Recent activity / 3-5 days ago"
+    },
+    {
+      "ageRange": [
+        6,
+        9
+      ],
+      "bucketIndex": 2,
+      "d": 0.71,
+      "displayName": "Days 6-8",
+      "entries": [],
+      "id": "r2",
+      "kind": "recent",
+      "qualifiedName": "Recent activity / 6-8 days ago"
+    },
+    {
+      "ageRange": [
+        9,
+        12
+      ],
+      "bucketIndex": 3,
+      "d": 0.6,
+      "displayName": "Days 9-11",
+      "entries": [
+        {
+          "ageDays": 9,
+          "anchor": "12-10-audit-3-agent-context-compilation-bounded-memory-agents-vs-acc-back-edge-3",
+          "bucket": "r3",
+          "d": 0.66,
+          "date": "2026-07-07",
+          "id": "log-entry:20260707-12-10-audit-3-agent-context-compilation-bounded-memory-agents-vs-acc-back-edge-3",
+          "logPath": "log/20260707.md",
+          "op": "audit",
+          "time": "12:10",
+          "title": "滑动窗口审计 3 轮收敛 — 核心边 Agent Context Compilation ↔ Bounded-Memory Agents 判定为「训练侧 vs 推理侧相补，非矛盾」，无需修复；窗口滑向 ACC 后 back-edge 正确屏蔽，第 3 轮种子为空自然收敛"
+        },
+        {
+          "ageDays": 9,
+          "anchor": "12-05-ingest-agenticsts-bounded-memory-testbed-agenticsts-arxiv-2607-02255-bounded-memory-agents-agenticsts-touched-4-pages",
+          "bucket": "r3",
+          "d": 0.66,
+          "date": "2026-07-07",
+          "id": "log-entry:20260707-12-05-ingest-agenticsts-bounded-memory-testbed-agenticsts-arxiv-2607-02255-bounded-memory-agents-agenticsts-touched-4-pages",
+          "logPath": "log/20260707.md",
+          "op": "ingest",
+          "time": "12:05",
+          "title": "agenticsts-bounded-memory-testbed — AgenticSTS 有界记忆测试床（arXiv 2607.02255），新增 Bounded-Memory Agents 概念页 + AgenticSTS 实体页 + 摘要页 (touched 4 pages)"
+        }
+      ],
+      "id": "r3",
+      "kind": "recent",
+      "qualifiedName": "Recent activity / 9-11 days ago"
+    },
+    {
+      "ageRange": [
+        12,
+        15
+      ],
+      "bucketIndex": 4,
+      "d": 0.48,
+      "displayName": "Days 12-14",
+      "entries": [],
+      "id": "r4",
+      "kind": "recent",
+      "qualifiedName": "Recent activity / 12-14 days ago"
+    },
+    {
+      "ageRange": [
+        15,
+        18
+      ],
+      "bucketIndex": 5,
+      "d": 0.37,
+      "displayName": "Days 15-17",
+      "entries": [],
+      "id": "r5",
+      "kind": "recent",
+      "qualifiedName": "Recent activity / 15-17 days ago"
+    },
+    {
+      "ageRange": [
+        18,
+        21
+      ],
+      "bucketIndex": 6,
+      "d": 0.25,
+      "displayName": "Days 18-20",
+      "entries": [],
+      "id": "r6",
+      "kind": "recent",
+      "qualifiedName": "Recent activity / 18-20 days ago"
+    }
+  ],
+  "schema": 1,
+  "window": {
+    "anchorDate": "2026-07-16",
+    "availableLogDays": 4,
+    "datesByBucket": {
+      "floating": [],
+      "r0": [],
+      "r1": [],
+      "r2": [],
+      "r3": [
+        "2026-07-07"
+      ],
+      "r4": [],
+      "r5": [],
+      "r6": []
+    },
+    "entryLimit": null,
+    "generatedAt": "2026-07-16T14:02:12+08:00",
+    "historyDays": 24,
+    "includedLogDays": 1,
+    "kind": "relative_day_buckets",
+    "ranges": {
+      "floating": {
+        "fromDaysAgo": 21,
+        "node": null,
+        "toDaysAgo": 24
+      },
+      "r0": {
+        "fromDaysAgo": 0,
+        "node": "r0",
+        "toDaysAgo": 3
+      },
+      "r1": {
+        "fromDaysAgo": 3,
+        "node": "r1",
+        "toDaysAgo": 6
+      },
+      "r2": {
+        "fromDaysAgo": 6,
+        "node": "r2",
+        "toDaysAgo": 9
+      },
+      "r3": {
+        "fromDaysAgo": 9,
+        "node": "r3",
+        "toDaysAgo": 12
+      },
+      "r4": {
+        "fromDaysAgo": 12,
+        "node": "r4",
+        "toDaysAgo": 15
+      },
+      "r5": {
+        "fromDaysAgo": 15,
+        "node": "r5",
+        "toDaysAgo": 18
+      },
+      "r6": {
+        "fromDaysAgo": 18,
+        "node": "r6",
+        "toDaysAgo": 21
+      }
+    },
+    "touchedNodeLimit": null
+  }
+}

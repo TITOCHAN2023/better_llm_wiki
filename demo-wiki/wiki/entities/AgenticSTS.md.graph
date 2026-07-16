@@ -1,0 +1,55 @@
+{
+  "breadcrumb": [
+    "wiki",
+    "entities",
+    "AgenticSTS"
+  ],
+  "displayName": "AgenticSTS",
+  "ego": {
+    "in": [
+      {
+        "from": "wiki/concepts/Bounded-Memory Agents.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/index.md",
+        "kind": "links_to"
+      },
+      {
+        "from": "wiki/summaries/agenticsts-bounded-memory-testbed.md",
+        "kind": "links_to"
+      }
+    ],
+    "out": [
+      {
+        "kind": "links_to",
+        "to": "wiki/concepts/Bounded-Memory Agents.md"
+      },
+      {
+        "kind": "links_to",
+        "to": "wiki/summaries/agenticsts-bounded-memory-testbed.md"
+      }
+    ]
+  },
+  "fileName": "AgenticSTS.md",
+  "hash": "sha256:07c20adcf5f60ff35384358ad16a52acdc044e8ed38adc7b546a16c53dbb551b",
+  "id": "wiki/entities/AgenticSTS.md",
+  "kind": "entity",
+  "parentName": "entities",
+  "qualifiedName": "entities / AgenticSTS",
+  "schema": 1,
+  "shortName": "AgenticSTS",
+  "stats": {
+    "degree": 5,
+    "inbound": 3,
+    "outbound": 2
+  },
+  "summary": "AgenticSTS（arXiv 2607.02255，2026-07-02）是一个面向长程 LLM agent 的**有界记忆测试床**，用于隔离研究显式记忆层。作者为 Xiangchen Cheng、Yunwei Jiang、Jianwen Sun、Zizhen Li、Chuanhao Li、Xiangcheng Cao、Yihao Liu、Fanrui Zhang、Li Jin、Kaipen",
+  "tags": [
+    "testbed",
+    "benchmark",
+    "agent-memory",
+    "long-horizon-agent"
+  ],
+  "title": "AgenticSTS"
+}
