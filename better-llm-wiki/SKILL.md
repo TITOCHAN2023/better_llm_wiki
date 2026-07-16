@@ -32,6 +32,26 @@ Instead of RAG (re-retrieving raw docs on every query), the LLM **compiles** raw
 
 The wiki is a living artifact with **five operations** — `compile`, `ingest`, `query`, `lint`, `audit` — plus a lightweight self-evolution loop after meaningful discussions. Every session starts by reading `SCHEMA.md`, `INTEREST.md`, and `wiki/index.md`.
 
+## Quick commands (one entrypoint)
+
+You never need to remember individual script names. One dispatcher runs every operation:
+
+```
+python3 <skill-path>/scripts/wiki.py <command> <wiki-root> [options]
+python3 <skill-path>/scripts/wiki.py help          # lists all commands + the write loop
+```
+
+**The write loop — run these in order every time you change `wiki/`:**
+
+```
+python3 <skill-path>/scripts/wiki.py query  <wiki-root> "<topic>"   # 1. read first — don't duplicate/invent
+# 2. edit wiki/ pages — links are [Title](/concepts/Foo.md): leading '/', never '../'
+python3 <skill-path>/scripts/wiki.py lint   <wiki-root>             # 3. fix everything it reports
+python3 <skill-path>/scripts/wiki.py commit <wiki-root>             # 4. checkpoint into git
+```
+
+The full intent→command table is in `references/commands.md`. The sections below give the detailed protocol for each operation; the underlying scripts (`lint_wiki.py`, `query_wiki.py`, …) can still be called directly and behave identically.
+
 ## Directory layout
 
 ```
@@ -578,6 +598,7 @@ At session start, read `SCHEMA.md`, `wiki/index.md`, and this sync marker. If th
 
 ## References
 
+- `references/commands.md` — **Command cheatsheet**: one-entrypoint `wiki.py`, the write loop, intent→command table (start here if unsure which command to run)
 - `references/schema-guide.md` — What to put in `SCHEMA.md`
 - `references/article-guide.md` — How to write good wiki articles (length, links, mermaid, math, divide-and-conquer)
 - `references/log-guide.md` — The `log/` folder convention
