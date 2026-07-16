@@ -494,9 +494,9 @@ See `references/audit-guide.md` for the full audit file format.
 | `scripts/lint_wiki.py` | Ten-pass health check |
 | `scripts/audit_review.py` | Group open/resolved audits by target file |
 | `scripts/audit_cr.py` | Build the periodic contradiction/correction register under `outputs/audit-cr/` from human-filed `audit/*.md` |
-| `scripts/ingest_scan.py` | Scope a fresh ingest's 1-hop neighborhood as an audit reading list (auto-detects seeds via `git status` ∪ stat-cache vs last lint → `recent.graph` → optional `--seed` override). With `--audited-state-file` it persists the enqueued-node set across calls and reports only the per-round increment — drives the sliding-window loop to natural convergence. |
-| `scripts/commit_wiki.py` | Checkpoint the wiki's truth-source state into git as the final step of any write op. Stages only SCHEMA.md / INTEREST.md / wiki/ / raw/ / audit/ / log/ (never `git add -A`); auto-derives the commit message from the latest `log/<today>.md` entry; tags each commit `ckpt/<op>/<timestamp>` for rollback (suppress with `--no-tag`). No-op outside git. |
-| `scripts/rollback_wiki.py` | List and safely roll back checkpoints. `--list [--days 30]` shows recent checkpoints; `--undo <tag/commit>` surgically reverts one checkpoint's **content** as a new forward commit (keeps later audits, re-revertible); `--to <ref>` restores the whole content tree to a checkpoint; `--prune-tags` drops old `ckpt/*` tags. Never rewinds `log/`, never rewrites history / resets hard / pushes. Refuses on a dirty tree. |
+| `scripts/ingest_scan.py` | Sliding-window audit: scope a fresh ingest's 1-hop neighborhood as a reading list; `--audited-state-file` persists progress and reports only each round's increment until convergence. (`--help` for seed detection) |
+| `scripts/commit_wiki.py` | Checkpoint truth-source paths into git as the final step of a write op — stages only SCHEMA/INTEREST/wiki/raw/audit/log (never `git add -A`), message auto-derived from the log, tags `ckpt/<op>/<ts>`. No-op outside git. |
+| `scripts/rollback_wiki.py` | Safely list/undo checkpoints: `--list`, `--undo <ref>` (revert one checkpoint's content as a forward commit), `--to <ref>`, `--prune-tags`. Never rewrites history or touches `log/`; refuses on a dirty tree. |
 | [qmd](https://github.com/tobi/qmd) | Optional local semantic search (useful at >100 pages) |
 
 The web viewer and manual audit files use the **same format** with the **same anchor algorithm**, so feedback can be processed consistently regardless of how it was created.
@@ -525,69 +525,21 @@ All subsequent content follows the language set in `SCHEMA.md` — see principle
 
 ## `wiki/index.md` format
 
-The LLM rebuilds `index.md` on every compile and touches it on every ingest. Organize it by user intent, using "I want to ..." entry points instead of a taxonomy-only category list. Links use the content-root anchor (leading `/`):
+The LLM rebuilds `index.md` on every compile and touches it on every ingest. Organize it by user intent — "I want to …" entry-point headings, not a taxonomy-only category list — with content-root (`/…`) links. `references/schema-guide.md` has a full template; the rules that matter:
 
-```markdown
----
-title: Index — <Topic>
-type: index
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
-sources: []
-tags: []
----
-
-# Index — <Topic>
-
-> One-sentence scope of the wiki.
-
-## 🔖 Navigation
-- [I want to understand the core ideas](#i-want-to-understand-the-core-ideas) · [I want to identify people, tools, papers, and organizations](#i-want-to-identify-people-tools-papers-and-organizations) · [I want to inspect sources](#i-want-to-inspect-sources) · [Open Questions](#open-questions)
-
-## I want to understand the core ideas
-- [Foo](/concepts/Foo.md) — one-line summary
-- [Bar](/concepts/Bar/index.md) — (folder-split) one-line summary
-    - [aspect-1](/concepts/Bar/aspect-1.md) — ...
-    - [aspect-2](/concepts/Bar/aspect-2.md) — ...
-
-## I want to identify people, tools, papers, and organizations
-- [Andrej Karpathy](</entities/Andrej Karpathy.md>) — AI researcher, author of the llm-wiki pattern
-
-## I want to inspect sources
-- 2026-04-09 — [llm-wiki-gist](/summaries/llm-wiki-gist.md) — Karpathy's original Gist
-
-## Open Questions
-- Q1: ...
-```
-
-Rules:
-- **Every bullet in `index.md` is a clickable MD link — never plain text.** `index.md` exists so the user and the agent can jump to any page in one click; a bullet like `- RuView` with no link is a dead weight entry that defeats the whole point. If you cannot produce a working path, the page does not exist yet — list it under "Open Questions" instead of the catalog.
-- Every wiki page must appear exactly once in `index.md`. `lint` enforces this.
-- Folder-split concepts show hierarchy via indented bullets — the parent's `index.md` link stays the primary entry; sub-pages are nested under it, also as MD links (see the `Bar` example above).
-- Entry-point headings should be written as user tasks, preferably beginning with "I want to ...". Concepts, entities, and summaries can be mixed under the same task when that is how a reader would naturally look for them.
-- Paths use the content-root anchor — `/concepts/Foo.md`, `</entities/Andrej Karpathy.md>`, etc. The leading `/` resolves at the wiki content root; this is the same convention used by all files under `wiki/`. Use `<...>` angle brackets around any path containing spaces.
-- `index.md` + `SCHEMA.md` together are what the AI reads at session start.
+- **Every bullet is a clickable MD link — never plain text.** `index.md` exists so you can jump to any page in one click; a bare `- RuView` bullet defeats the point. If you can't produce a working path, the page doesn't exist yet — list it under "Open Questions", not the catalog.
+- Every wiki page appears **exactly once** in `index.md` (`lint` enforces this).
+- Folder-split topics nest sub-pages as indented MD links under the parent's `index.md` link.
+- Paths use the content-root anchor (`/concepts/Foo.md`, `</entities/Name with spaces.md>`) — same rule as everywhere else.
+- `index.md` + `SCHEMA.md` are what the AI reads at session start.
 
 ## `log/` format
 
-See `references/log-guide.md` for full details. Minimum:
-
-- One file per day: `log/YYYYMMDD.md`
-- No YAML frontmatter in log files. The first line must be the H1 date, e.g. `# 2026-04-09`; `lint_wiki.py` enforces this because recent-activity graph compilation reads log files directly.
-- H1 = the date; H2 per entry with `## [HH:MM] <op> | <one-line description>`
-- Ops: `compile`, `ingest`, `query`, `lint`, `audit`, `promote`, `split`, `scaffold`
-
-Quick grep across history: `grep -rh "^## \[" log/ | tail -20`.
+One file per day `log/YYYYMMDD.md`, **no frontmatter**, first line is the H1 date (`# 2026-04-09`), then one `## [HH:MM] <op> | <one-line>` per entry (`op` ∈ compile/ingest/query/lint/audit/promote/split/scaffold). `lint` enforces the shape because recent-activity graph compilation reads logs directly. Full convention + grep recipes: `references/log-guide.md`.
 
 ## Active skill sync
 
-When a project vendors this skill's `scripts/` or `references/` into a wiki root, record the last synced skill state in `<wiki-root>/.better-llm-wiki-sync`:
-
-```json
-{"source":"better-llm-wiki","synced_at":"YYYY-MM-DDTHH:MM:SS","skill_version":"<commit-or-package-version>"}
-```
-
-At session start, read `SCHEMA.md`, `wiki/index.md`, and this sync marker. If the marker is missing or the source skill version differs, sync the vendored `scripts/` and `references/`, then update the marker. If no commit or package version is available, use a content hash of the copied files as `skill_version`.
+When a project vendors this skill's `scripts/`/`references/` into a wiki, record the synced version in `<wiki-root>/.better-llm-wiki-sync` — `{"source":"better-llm-wiki","synced_at":"…","skill_version":"<commit-or-content-hash>"}`. At session start, if the marker is missing or its version differs, re-sync the vendored files and update it.
 
 ## Use cases
 
