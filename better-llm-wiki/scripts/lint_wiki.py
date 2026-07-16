@@ -2339,6 +2339,159 @@ def write_graph_artifacts(
     }
 
 
+# ── Git-first incremental change detection (O(changes), not O(corpus)) ───────
+# The stat-cache path (cached_changed_wiki_files) must stat every page and hold
+# the whole corpus's stats in memory to spot `git pull` / checkout deltas — an
+# O(total-pages) memory floor that defeats scale. When the wiki lives in git we
+# get the same coverage in O(changes): `git status` for the working tree, plus
+# `git diff <last-linted-HEAD> HEAD` for anything committed since the last lint
+# (which is exactly what pull/checkout produce). The last-linted commit is kept
+# in a tiny sidecar so no per-page state is needed.
+
+def last_lint_head_path(root_path: Path) -> Path:
+    return root_path / ".graph-cache" / "last-lint-head.graph"
+
+
+def read_last_lint_head(root_path: Path) -> str | None:
+    data = load_json_file(last_lint_head_path(root_path), {})
+    if isinstance(data, dict):
+        head = data.get("head")
+        if isinstance(head, str) and head:
+            return head
+    return None
+
+
+def write_last_lint_head(root_path: Path, head: str | None) -> None:
+    if head:
+        atomic_write_json(last_lint_head_path(root_path), {"head": head})
+
+
+def git_head_sha(root_path: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root_path), "rev-parse", "HEAD"],
+            check=False, capture_output=True, text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+def git_committed_wiki_changes(
+    root_path: Path, last_sha: str | None, head: str | None
+) -> tuple[list[Path], list[str]]:
+    """`git diff --name-only <last_sha> <head> -- wiki` → committed-since-last-lint.
+    Empty when there is no baseline, no HEAD, or the two match. Bad/rebased-away
+    SHAs simply yield nothing (git status still covers the working tree)."""
+    if not last_sha or not head or last_sha == head:
+        return [], []
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root_path), "diff", "--name-only", "-z",
+             last_sha, head, "--", "wiki"],
+            check=False, capture_output=True, text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return [], []
+    if result.returncode != 0:
+        return [], []
+    changed: list[Path] = []
+    deleted: list[str] = []
+    for rel in (e for e in result.stdout.split("\0") if e):
+        if not rel.startswith("wiki/") or not rel.endswith(".md"):
+            continue
+        path = (root_path / rel).resolve()
+        if path.exists():
+            changed.append(path)
+        else:
+            deleted.append(rel)
+    return changed, deleted
+
+
+def git_toplevel(root_path: Path) -> Path | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root_path), "rev-parse", "--show-toplevel"],
+            check=False, capture_output=True, text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    top = result.stdout.strip()
+    if not top:
+        return None
+    try:
+        return Path(top).resolve()
+    except OSError:
+        return None
+
+
+def changed_wiki_files_gitfirst(
+    root_path: Path,
+) -> tuple[list[Path], list[str], str, str | None] | None:
+    """O(changes) change set for a git-backed wiki, else None (caller falls back
+    to the stat-cache sweep). Union of working-tree status and commits since the
+    last lint. Returns (changed_paths, deleted_rels, source, current_head).
+
+    Engages ONLY when the wiki root IS the git repo root: git reports paths
+    relative to the repo top-level, and the `wiki/…` pathspec/prefix logic
+    assumes those coincide. A wiki nested inside a larger repo (e.g. a vendored
+    demo) would yield `subdir/wiki/…` paths that silently miss the `wiki/`
+    prefix — so those defer to the stat-cache path, which is correct there."""
+    top = git_toplevel(root_path)
+    if top is None or top != root_path.resolve():
+        return None
+    status = git_changed_wiki_files(root_path)  # None if not git / wiki ignored
+    if status is None:
+        return None
+    status_changed, status_deleted, _ = status
+    head = git_head_sha(root_path)
+    last = read_last_lint_head(root_path)
+    committed_changed, committed_deleted = git_committed_wiki_changes(root_path, last, head)
+    changed = sorted(set(status_changed) | set(committed_changed))
+    deleted = sorted(set(status_deleted) | set(committed_deleted))
+    source = "git status+diff" if last else "git status (cold baseline recorded)"
+    return changed, deleted, source, head
+
+
+def collect_scale_for_pages(pages: set[Path]) -> dict[str, object]:
+    """Scale payload over ONLY the given pages (O(changes) memory) — the
+    incremental-mode analogue of collect_wiki_md_scale, which sweeps the whole
+    corpus. `stats` is intentionally empty: git-first mode does not maintain the
+    per-page stat cache."""
+    files: list[Path] = []
+    large_pages: list[tuple[int, Path]] = []
+    huge_pages: list[tuple[int, Path]] = []
+    stat_errors: list[tuple[Path, str]] = []
+    total_bytes = 0
+    for path in sorted(pages):
+        try:
+            stat = path.stat()
+        except OSError as exc:
+            stat_errors.append((path, str(exc)))
+            continue
+        size = stat.st_size
+        files.append(path)
+        total_bytes += size
+        if size >= MD_PAGE_WARN_BYTES:
+            large_pages.append((size, path))
+        if size >= MD_PAGE_HARD_BYTES:
+            huge_pages.append((size, path))
+    large_pages.sort(key=lambda item: item[0], reverse=True)
+    return {
+        "files": files,
+        "totalBytes": total_bytes,
+        "largest": large_pages[:20],
+        "stats": {},
+        "largePages": large_pages,
+        "hugePages": huge_pages,
+        "statErrors": stat_errors,
+    }
+
+
 def lint(root: str, changed_only: bool = True) -> int:
     root_path = Path(root).resolve()
     wiki_path = root_path / "wiki"
@@ -2361,21 +2514,41 @@ def lint(root: str, changed_only: bool = True) -> int:
         print_open_audit_preflight(root_path, open_audits)
         return 1
 
-    md_scale = collect_wiki_md_scale(wiki_path)
-    scale_issues = scale_issue_payload(root_path, md_scale)
-    files_from_scale = md_scale.get("files", [])
-    all_wiki_files = files_from_scale if isinstance(files_from_scale, list) else []
-    wiki_file_set = set(all_wiki_files)
     index_path = (wiki_path / "index.md").resolve()
+    git_head_to_record: str | None = None
+    use_stat_cache = True  # write the O(corpus) md stat cache? only in non-git modes
 
     deleted_changed_pages: list[str] = []
     if changed_only:
-        changed_files, deleted_changed_pages, source = changed_wiki_files(root_path, md_scale)
-        changed_file_set = {p for p in changed_files if p in wiki_file_set}
-        if not changed_file_set and not deleted_changed_pages:
-            print(f"✅ Changed-only lint: no changed wiki Markdown files ({source})")
-            write_md_stat_cache(root_path, md_scale)
-            return 0
+        gitfirst = changed_wiki_files_gitfirst(root_path)
+        if gitfirst is not None:
+            # ── Git-backed wiki → O(changes) detection, no whole-corpus sweep ──
+            changed_files, deleted_changed_pages, source, git_head_to_record = gitfirst
+            use_stat_cache = False
+            changed_file_set = {
+                p for p in changed_files if p.name.endswith(".md") and p.is_file()
+            }
+            all_wiki_files = []          # unused in incremental (orphan/graph skipped)
+            wiki_file_set = set()        # inbound tracking unused in incremental
+            md_scale = collect_scale_for_pages(changed_file_set)
+            scale_issues = scale_issue_payload(root_path, md_scale)
+            if not changed_file_set and not deleted_changed_pages:
+                print(f"✅ Changed-only lint: no changed wiki Markdown files ({source})")
+                write_last_lint_head(root_path, git_head_to_record)
+                return 0
+        else:
+            # ── Non-git wiki → stat-cache sweep (O(corpus) memory; the fallback) ──
+            md_scale = collect_wiki_md_scale(wiki_path)
+            scale_issues = scale_issue_payload(root_path, md_scale)
+            files_from_scale = md_scale.get("files", [])
+            all_wiki_files = files_from_scale if isinstance(files_from_scale, list) else []
+            wiki_file_set = set(all_wiki_files)
+            changed_files, deleted_changed_pages, source = changed_wiki_files(root_path, md_scale)
+            changed_file_set = {p for p in changed_files if p in wiki_file_set}
+            if not changed_file_set and not deleted_changed_pages:
+                print(f"✅ Changed-only lint: no changed wiki Markdown files ({source})")
+                write_md_stat_cache(root_path, md_scale)
+                return 0
         if not print_scale_preflight(
             root_path,
             md_scale,
@@ -2398,6 +2571,12 @@ def lint(root: str, changed_only: bool = True) -> int:
             if len(deleted_changed_pages) > 20:
                 print(f"   … and {len(deleted_changed_pages) - 20} more")
     else:
+        md_scale = collect_wiki_md_scale(wiki_path)
+        scale_issues = scale_issue_payload(root_path, md_scale)
+        files_from_scale = md_scale.get("files", [])
+        all_wiki_files = files_from_scale if isinstance(files_from_scale, list) else []
+        wiki_file_set = set(all_wiki_files)
+        git_head_to_record = git_head_sha(root_path)
         if not print_scale_preflight(root_path, md_scale):
             return 1
         all_lint_files = all_wiki_files
@@ -2855,7 +3034,7 @@ def lint(root: str, changed_only: bool = True) -> int:
             "✅ Scoped graph sidecars refreshed "
             f"({scoped_graph_stats['sidecars']} page-local sidecars; global graph skipped)"
         )
-        if issues == 0:
+        if issues == 0 and use_stat_cache:
             write_md_stat_cache(root_path, md_scale)
     else:
         graph_stats = write_graph_artifacts(
@@ -2885,6 +3064,11 @@ def lint(root: str, changed_only: bool = True) -> int:
             print("✅ Wiki is healthy — no issues found")
     else:
         print(f"⚠️  {issues} issue(s) found — review above and fix before next ingest")
+
+    # Advance the git-first baseline only on a clean pass, so an unresolved run
+    # is re-examined next time rather than being marked "already linted".
+    if issues == 0 and git_head_to_record:
+        write_last_lint_head(root_path, git_head_to_record)
 
     return 0 if issues == 0 else 1
 
