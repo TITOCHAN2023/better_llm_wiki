@@ -259,6 +259,16 @@ MD_HARD_BYTES = env_int("LLM_WIKI_MD_HARD_MB", 1024) * 1024 * 1024
 MD_PAGE_WARN_BYTES = env_int("LLM_WIKI_PAGE_WARN_KB", 512) * 1024
 MD_PAGE_HARD_BYTES = env_int("LLM_WIKI_PAGE_HARD_MB", 16) * 1024 * 1024
 
+# Page-COUNT guard. Full-graph lint holds per-page structures (preloaded text,
+# node/edge/adjacency/reverse-link maps, sidecar payloads) in memory at once, so
+# its peak RSS scales with the number of pages READ this run — roughly ~30 KB per
+# page measured on synthetic corpora — NOT with total bytes. A wiki of many tiny
+# pages therefore OOMs long before the byte hard-stop. These bound the count of
+# pages a single run will load. Above the hard limit the run refuses and points
+# the user at the incremental + query/index workflow (the intended path at scale).
+MD_MAX_PAGES_WARN = env_int("LLM_WIKI_MAX_PAGES_WARN", 25000)
+MD_MAX_PAGES_HARD = env_int("LLM_WIKI_MAX_PAGES_HARD", 80000)
+
 
 def extract_md_link_hrefs(text: str) -> list[str]:
     """Return every MD-link href pointing at a .md file (anchor stripped).
@@ -400,7 +410,18 @@ def print_scale_preflight(
         huge_pages = [(size, path) for size, path in huge_pages if path in page_scope]
         large_pages = [(size, path) for size, path in large_pages if path in page_scope]
 
+    # Pages actually loaded this run: the changed scope when incremental,
+    # else the whole corpus. Memory scales with THIS count, so the page-count
+    # guard applies in both modes (it also catches a cold first lint that has
+    # no stat cache yet and would otherwise read-all).
+    read_count = len(page_scope) if page_scope is not None else file_count
+
     hard_reasons: list[str] = []
+    if read_count >= MD_MAX_PAGES_HARD:
+        hard_reasons.append(
+            f"{read_count} page(s) would be loaded this run "
+            f"(hard stop {MD_MAX_PAGES_HARD}; peak RSS scales ~30 KB/page)"
+        )
     if total_hard_stop and total_bytes >= MD_HARD_BYTES:
         hard_reasons.append(
             f"wiki/**/*.md totals {format_bytes(total_bytes)} "
@@ -412,7 +433,7 @@ def print_scale_preflight(
         )
 
     if hard_reasons:
-        print("\n🔴 MD scale guard stopped full lint before reading the corpus:")
+        print("\n🔴 MD scale guard stopped this lint before reading the corpus:")
         for reason in hard_reasons:
             print(f"   {reason}")
         for size, path in huge_pages[:10]:
@@ -420,16 +441,23 @@ def print_scale_preflight(
         print("   fix: split oversized pages, archive cold material, or keep raw/source bulk outside wiki/.")
         print("   use query/index workflows for large corpora; full graph lint is intentionally bounded.")
         print(
-            "   knobs: LLM_WIKI_MD_HARD_MB, LLM_WIKI_MD_WARN_MB, "
+            "   knobs: LLM_WIKI_MAX_PAGES_HARD, LLM_WIKI_MAX_PAGES_WARN, "
+            "LLM_WIKI_MD_HARD_MB, LLM_WIKI_MD_WARN_MB, "
             "LLM_WIKI_PAGE_HARD_MB, LLM_WIKI_PAGE_WARN_KB"
         )
         return False
 
-    if total_bytes >= MD_WARN_BYTES or large_pages:
+    if total_bytes >= MD_WARN_BYTES or large_pages or read_count >= MD_MAX_PAGES_WARN:
         print(
             f"\n🟡 MD scale warning: {file_count} file(s), "
             f"{format_bytes(total_bytes)} total"
         )
+        if read_count >= MD_MAX_PAGES_WARN:
+            print(
+                f"   {read_count} page(s) loaded this run "
+                f"(warn {MD_MAX_PAGES_WARN}, hard {MD_MAX_PAGES_HARD}) — "
+                f"prefer incremental lint + query/index at this scale"
+            )
         if total_bytes >= MD_WARN_BYTES:
             print(f"   warn threshold: {format_bytes(MD_WARN_BYTES)}")
         if large_pages:

@@ -671,7 +671,16 @@ def load_pages_from_index(
             candidate_ids.discard("wiki/index.md")
 
         if candidate_ids is None:
-            doc_rows = conn.execute("SELECT * FROM documents").fetchall()
+            # No keyword / interest / seed anchor — a browse/recency query.
+            # Loading every document here OOMs on a large corpus (tens of GB /
+            # millions of pages). A no-anchor query is inherently recency-first,
+            # so bound the working set to a generous recency-ordered pool instead
+            # of the whole table; ranking then applies as usual within it.
+            browse_cap = max(result_limit * 50, 1000)
+            doc_rows = conn.execute(
+                "SELECT * FROM documents ORDER BY updated_at DESC LIMIT ?",
+                (browse_cap,),
+            ).fetchall()
         elif not candidate_ids:
             return {}, seeds, unresolved
         else:
