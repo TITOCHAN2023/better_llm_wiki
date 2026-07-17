@@ -53,23 +53,84 @@ is inventing facts or link targets. Two hard rules prevent it: *read before you
 write* (`query` the wiki + open the `raw/` source you're grounding in), and *lint
 after you write* (a script checks dead links, orphans, missing index entries,
 banned `../`, frontmatter, and cross-page numeric conflicts). The agent fixes
-everything lint reports before the edit is considered done.
-
-**It audits itself.** After an ingest, `ingest_scan.py` expands one hop around
-the pages you just touched and hands back that neighborhood as a reading list.
-The agent reads it and reconciles contradictions (stale numbers, clashing
-definitions); each fix becomes the seed of the next round, and the window slides
-outward until nothing new appears — a fixpoint. Machine-checkable problems are
-hard errors; judgment calls are surfaced for the agent (or a human, via the
-`audit/` inbox) to decide.
+everything lint reports before the edit is considered done. (Self-auditing goes
+further — see below.)
 
 ## The five operations
 
-Every action on the wiki is one of `compile`, `ingest`, `query`, `lint`, `audit`,
-plus a lightweight self-evolution pass after substantive discussions. Each
-appends an entry to the day's log. See `better-llm-wiki/SKILL.md` for the full
-protocol, and `better-llm-wiki/references/commands.md` for a copy-paste command
-cheatsheet.
+Everything the agent does is one of five verbs — think of them as **feed, ask,
+correct, keep** in daily use. Each one appends a line to the day's log so the
+wiki's history is auditable.
+
+- **`ingest` (feed)** — add a source. It lands twice: the original into `raw/`,
+  and the *understanding* into `wiki/` as 5–15 short cross-linked pages (a
+  summary, some concept pages, a few entity pages), each with a frontmatter
+  `type` and content-root links. This is the compile step that turns a document
+  into graph nodes.
+- **`query` (ask)** — answer a question **grounded only in the wiki**, never from
+  the model's general knowledge. It ranks candidate pages (keyword + graph
+  proximity + recency + centrality + your `INTEREST.md`), reads them, and
+  synthesizes. Miss in the index? It re-checks `index.md` before concluding
+  "not in the wiki" — and then says so instead of fabricating.
+- **`compile` (restructure)** — keep pages small: split anything past ~1200 words
+  into a folder, merge near-duplicates, rebuild `index.md`. Structure is
+  maintained, not left to rot.
+- **`lint` (keep / checkup)** — the health check, run after every write and
+  incremental by default. Priority order: (1) block if `audit/` has unprocessed
+  feedback; (2) error on oversized pages / page-count guard; (3) hard errors on
+  dead links, `../`, missing `/`, missing frontmatter; (4) soft signals for
+  possible contradictions and cross-page numeric conflicts; (5) recompile the
+  `graph/` artifacts. **The dividing line: what a machine can be 100 % sure of is
+  a hard error; what needs judgment is a soft signal handed to the agent.**
+- **`audit` (correct)** — the quality net (below). Machine-run day to day; humans
+  step in only to file a correction.
+
+Binding them is one discipline — **read before you write, lint after you write** —
+plus a light **self-evolution** pass that files durable discussion takeaways into
+`outputs/` and interest signals into `INTEREST.md`. Full protocol in
+`better-llm-wiki/SKILL.md`; copy-paste commands in
+`better-llm-wiki/references/commands.md`.
+
+### Self-auditing, as a fixpoint
+
+The wiki is AI-written, so it will be wrong sometimes, and human sources
+contradict each other. After an ingest, `ingest_scan.py` takes the pages you
+just touched and expands **one hop** along the link graph, handing back that
+neighborhood as a reading list. The agent reads it and reconciles any conflict
+(stale numbers, clashing definitions). Here's the flywheel: **fixing a page edits
+it, which makes it the seed of the next round's one-hop scan** — the window
+slides outward, round after round, until a scan surfaces nothing new. That
+fixpoint *is* "the wiki is internally consistent." A bounded queue (already-seen
+nodes are shielded) guarantees it terminates. Corrections that need a human land
+in the `audit/` inbox as durable files — `lint` refuses to pass while any are
+unprocessed, so feedback never gets lost in chat history.
+
+![The 1-hop audit window sliding round by round along the faulty branch ①→④→⑤→⑥ until a round finds no new conflict — the fixpoint. Nodes ⑨⑪ stay outside the window and are never touched.](assets/sliding-window-audit.gif)
+
+## When it fits (and when it doesn't)
+
+The whole point is **deep integration and knowledge that evolves** — that draws
+the boundary sharply.
+
+**Good fit** — networks worth curating and iterating over time:
+
+- Concept/architecture encyclopedias for a complex system, or the lore of a
+  sprawling novel/game — heavy cross-referencing where adding a module or
+  character should auto-update related pages and pull new links. RAG's fragment
+  retrieval can't give you that.
+- High-value vertical knowledge bases (clinical guidelines, compliance manuals)
+  where the enemy is contradiction, not volume — ingesting a new rule surfaces
+  "this conflicts with the 2024 §3, revise or mark deprecated?".
+- A team's living handbook (onboarding, best practices) fused from scattered
+  chat and weekly notes into an always-current SOP.
+
+**Bad fit** — reach for RAG / a database / full-text search instead:
+
+- High-volume, low-density logs (support tickets, error logs, transactions). The
+  data is "dead" — it needs neither interlinking nor rewriting; weaving a graph
+  just burns tokens.
+- A chaotic dump of unvetted early material. Garbage woven deep into the graph
+  produces a well-edited tower of rumors — worse than no structure.
 
 ## Layout
 
