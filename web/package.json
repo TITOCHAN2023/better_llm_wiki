@@ -2,6 +2,7 @@
   "name": "llm-wiki-web",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE.md",
   "type": "module",
   "description": "Local wiki preview + audit feedback server for the llm-wiki skill.",
   "scripts": {

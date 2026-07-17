@@ -208,3 +208,10 @@ python3 $SKILL/wiki.py commit $WIKI
 
 To use it as an agent skill, copy `better-llm-wiki/` into your skill directory,
 or paste `better-llm-wiki/SKILL.md` into your agent's context.
+
+## License
+
+[**PolyForm Noncommercial License 1.0.0**](LICENSE.md) — free for **any
+noncommercial purpose**: personal study, hobby and amateur projects, private
+entertainment, research, education, and nonprofit/government use. **Commercial
+use is not permitted.** For a commercial license, contact the author.

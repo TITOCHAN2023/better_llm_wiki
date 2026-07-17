@@ -2,6 +2,7 @@
   "name": "audit-shared",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE.md",
   "description": "Shared audit schema, anchor algorithm, id generator, and YAML serializer for the LLM Wiki web viewer and compatible audit-writing tools.",
   "type": "module",
   "main": "dist/index.js",
