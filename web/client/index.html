@@ -78,28 +78,95 @@
       </form>
     </dialog>
 
-    <div id="graph-overlay" class="hidden">
-      <div class="graph-header">
-        <h2>Knowledge graph</h2>
+    <section id="graph-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="graph-title">
+      <header class="graph-header">
+        <div class="graph-heading">
+          <span class="graph-kicker">KNOWLEDGE MAP</span>
+          <h2 id="graph-title">Knowledge graph</h2>
+          <span id="graph-source-label">Compiled graph</span>
+        </div>
         <div class="graph-controls">
-          <button id="graph-reset" class="btn btn-ghost" type="button">Reset</button>
-          <button id="graph-close" class="btn btn-icon btn-ghost" type="button" title="Close (G or Esc)">✕</button>
+          <button id="graph-fit" class="btn btn-ghost" type="button" title="Fit graph to view">Fit</button>
+          <button id="graph-reset" class="btn btn-ghost" type="button" title="Re-run layout">Re-layout</button>
+          <button id="graph-close" class="btn btn-icon btn-ghost" type="button" title="Close (G or Esc)" aria-label="Close graph">✕</button>
         </div>
+      </header>
+
+      <nav class="graph-view-tabs" aria-label="Graph views">
+        <button class="graph-view-tab active" type="button" data-graph-view="knowledge">Knowledge</button>
+        <button class="graph-view-tab" type="button" data-graph-view="recent">Recent</button>
+        <button class="graph-view-tab" type="button" data-graph-view="navigation">Navigation</button>
+        <button class="graph-view-tab" type="button" data-graph-view="lineage">Lineage</button>
+        <button class="graph-view-tab" type="button" data-graph-view="local">Current page</button>
+      </nav>
+
+      <div class="graph-workbench">
+        <aside class="graph-panel graph-panel-left">
+          <section class="graph-panel-section graph-search-section">
+            <label class="graph-panel-label" for="graph-search">Find a node</label>
+            <div class="graph-search-wrap">
+              <span aria-hidden="true">⌕</span>
+              <input id="graph-search" type="search" autocomplete="off" placeholder="Title, path or tag" />
+              <kbd>/</kbd>
+            </div>
+            <div id="graph-search-results" class="graph-search-results hidden" role="listbox"></div>
+          </section>
+
+          <section class="graph-panel-section">
+            <span class="graph-panel-label">Overview</span>
+            <div class="graph-stat-grid">
+              <div><strong id="graph-stat-nodes">—</strong><span>nodes</span></div>
+              <div><strong id="graph-stat-edges">—</strong><span>edges</span></div>
+            </div>
+            <p id="graph-view-description" class="graph-panel-copy">Pages and the links between them.</p>
+          </section>
+
+          <section class="graph-panel-section graph-kind-section">
+            <span class="graph-panel-label">Node types</span>
+            <div id="graph-kind-filters" class="graph-kind-filters"></div>
+          </section>
+
+          <footer class="graph-shortcuts">
+            <span><kbd>drag</kbd> move</span>
+            <span><kbd>scroll</kbd> zoom</span>
+            <span><kbd>click</kbd> inspect</span>
+            <span><kbd>double click</kbd> open</span>
+          </footer>
+        </aside>
+
+        <div id="graph-svg-wrap">
+          <div class="graph-grid" aria-hidden="true"></div>
+          <svg id="graph-svg" aria-label="Interactive knowledge graph"></svg>
+          <div id="graph-loading" class="graph-canvas-state hidden">Loading graph…</div>
+          <div id="graph-empty" class="graph-canvas-state hidden">
+            <strong>No graph data</strong>
+            <span>This view has no compiled nodes yet.</span>
+          </div>
+          <div class="graph-canvas-badge"><span></span><b id="graph-canvas-view">KNOWLEDGE</b></div>
+        </div>
+
+        <aside class="graph-panel graph-panel-right">
+          <div id="graph-inspector-empty" class="graph-inspector-empty">
+            <span class="graph-inspector-mark">↖</span>
+            <strong>Select a node</strong>
+            <p>Inspect its context, metadata and relationships without leaving the map.</p>
+          </div>
+          <div id="graph-inspector-detail" class="graph-inspector-detail hidden">
+            <div class="graph-inspector-kind" id="graph-inspector-kind">PAGE</div>
+            <h3 id="graph-inspector-title"></h3>
+            <p id="graph-inspector-path" class="graph-inspector-path"></p>
+            <p id="graph-inspector-summary" class="graph-inspector-summary"></p>
+            <div class="graph-inspector-metrics">
+              <div><strong id="graph-inspector-in">0</strong><span>incoming</span></div>
+              <div><strong id="graph-inspector-out">0</strong><span>outgoing</span></div>
+              <div><strong id="graph-inspector-degree">0</strong><span>total</span></div>
+            </div>
+            <div id="graph-inspector-tags" class="graph-inspector-tags"></div>
+            <button id="graph-open-page" class="graph-open-page" type="button">Open document <span>↗</span></button>
+          </div>
+        </aside>
       </div>
-      <div id="graph-svg-wrap">
-        <canvas id="graph-particles"></canvas>
-        <svg id="graph-svg"></svg>
-        <div class="graph-hint">
-          drag nodes · <kbd>scroll</kbd> zoom · <kbd>click</kbd> open
-        </div>
-        <div class="graph-legend">
-          <div class="legend-row"><span class="legend-dot concepts"></span> concepts</div>
-          <div class="legend-row"><span class="legend-dot entities"></span> entities</div>
-          <div class="legend-row"><span class="legend-dot summaries"></span> summaries</div>
-          <div class="legend-row"><span class="legend-dot other"></span> other</div>
-        </div>
-      </div>
-    </div>
+    </section>
 
     <script type="module" src="/assets/main.js"></script>
   </body>

@@ -2,8 +2,13 @@ import mermaid from "mermaid";
 import type { AuditEntry } from "audit-shared";
 import { renderTree } from "./tree.js";
 import { installFeedbackUI } from "./feedback.js";
-import { renderGraph, type GraphData, type GraphNode } from "./graph.js";
-import { ParticleField } from "./particles.js";
+import {
+  renderGraph,
+  type GraphController,
+  type GraphData,
+  type GraphNode,
+  type GraphView,
+} from "./graph.js";
 
 interface PageResponse {
   path: string;
@@ -17,7 +22,11 @@ const state = {
   currentPath: "wiki/index.md" as string,
   rawMarkdown: "" as string,
   author: "me" as string,
-  graphTeardown: null as (() => void) | null,
+  graphController: null as GraphController | null,
+  graphData: null as GraphData | null,
+  graphView: "knowledge" as GraphView,
+  hiddenGraphKinds: new Set<string>(),
+  selectedGraphNode: null as GraphNode | null,
 };
 
 // ── Mermaid with Catppuccin Mocha palette ──────────────────────────────────
@@ -112,53 +121,140 @@ async function main() {
     void loadAudits(state.currentPath);
   });
 
-  // Graph toggle.
+  // Graph workbench.
   const graphOverlay = document.getElementById("graph-overlay")!;
+  const graphSvg = document.getElementById("graph-svg") as unknown as SVGSVGElement;
+  const graphLoading = document.getElementById("graph-loading")!;
+  const graphEmpty = document.getElementById("graph-empty")!;
+  const graphSearch = document.getElementById("graph-search") as HTMLInputElement;
+  const graphSearchResults = document.getElementById("graph-search-results")!;
+
+  const openNode = (node: GraphNode) => {
+    if (!node.navigable || !node.path) return;
+    closeGraph();
+    void loadPage(node.path);
+    history.pushState({ page: node.path }, "", `/?page=${encodeURIComponent(node.path)}`);
+  };
+
+  const setSelectedNode = (node: GraphNode | null) => {
+    state.selectedGraphNode = node;
+    renderGraphInspector(node);
+  };
+
+  const renderCurrentGraph = () => {
+    state.graphController?.destroy();
+    state.graphController = null;
+    if (!state.graphData) return;
+
+    const visibleNodes = state.graphData.nodes.filter((node) => !state.hiddenGraphKinds.has(node.kind));
+    const visibleIds = new Set(visibleNodes.map((node) => node.id));
+    const visibleData: GraphData = {
+      ...state.graphData,
+      nodes: visibleNodes,
+      edges: state.graphData.edges.filter((edge) => {
+        const source = typeof edge.source === "string" ? edge.source : edge.source.id;
+        const target = typeof edge.target === "string" ? edge.target : edge.target.id;
+        return visibleIds.has(source) && visibleIds.has(target);
+      }),
+    };
+
+    graphEmpty.classList.toggle("hidden", visibleNodes.length > 0);
+    if (visibleNodes.length === 0) return;
+    state.graphController = renderGraph(graphSvg, visibleData, {
+      selectedId: state.selectedGraphNode?.id,
+      onNodeSelect: setSelectedNode,
+      onNodeOpen: openNode,
+    });
+  };
+
+  const loadGraphView = async (view: GraphView) => {
+    state.graphView = view;
+    state.hiddenGraphKinds.clear();
+    setSelectedNode(null);
+    graphSearch.value = "";
+    graphSearchResults.classList.add("hidden");
+    graphLoading.classList.remove("hidden");
+    graphEmpty.classList.add("hidden");
+    state.graphController?.destroy();
+    state.graphController = null;
+    graphSvg.replaceChildren();
+    setActiveGraphView(view);
+
+    try {
+      const params = new URLSearchParams({ view, path: state.currentPath });
+      const response = await fetch(`/api/graph?${params}`);
+      if (!response.ok) throw new Error(`Graph request failed: ${response.status}`);
+      const data = (await response.json()) as GraphData;
+      state.graphData = data;
+      updateGraphOverview(data);
+      renderKindFilters(data, () => renderCurrentGraph());
+      updateGraphViewAvailability(data.meta.availableViews);
+      renderCurrentGraph();
+    } catch (error) {
+      console.error(error);
+      state.graphData = null;
+      graphEmpty.classList.remove("hidden");
+      graphEmpty.querySelector("strong")!.textContent = "Could not load graph";
+      graphEmpty.querySelector("span")!.textContent = "Check the compiled .graph files and try again.";
+    } finally {
+      graphLoading.classList.add("hidden");
+    }
+  };
+
   const openGraph = async () => {
     graphOverlay.classList.remove("hidden");
-    // Let layout settle so canvas/svg get their sizes.
     await new Promise((r) => requestAnimationFrame(() => r(null)));
-
-    const data = (await fetch("/api/graph").then((r) => r.json())) as GraphData;
-    const svg = document.getElementById("graph-svg") as unknown as SVGSVGElement;
-    const canvas = document.getElementById("graph-particles") as HTMLCanvasElement;
-
-    if (state.graphTeardown) state.graphTeardown();
-
-    const particles = new ParticleField(canvas, 95);
-    particles.start();
-
-    const teardownGraph = renderGraph(svg, data, {
-      onNodeClick: (node: GraphNode) => {
-        closeGraph();
-        void loadPage(node.path);
-        history.pushState({ page: node.path }, "", `/?page=${encodeURIComponent(node.path)}`);
-      },
-    });
-
-    state.graphTeardown = () => {
-      particles.stop();
-      teardownGraph();
-    };
+    await loadGraphView(state.graphView);
   };
   const closeGraph = () => {
     graphOverlay.classList.add("hidden");
-    if (state.graphTeardown) {
-      state.graphTeardown();
-      state.graphTeardown = null;
-    }
+    state.graphController?.destroy();
+    state.graphController = null;
+    graphSearchResults.classList.add("hidden");
   };
+
   document.getElementById("btn-graph")!.addEventListener("click", () => {
     if (graphOverlay.classList.contains("hidden")) void openGraph();
     else closeGraph();
   });
   document.getElementById("graph-close")!.addEventListener("click", closeGraph);
-  document.getElementById("graph-reset")!.addEventListener("click", () => {
-    void openGraph();
+  document.getElementById("graph-fit")!.addEventListener("click", () => state.graphController?.fit());
+  document.getElementById("graph-reset")!.addEventListener("click", () => state.graphController?.reset());
+  document.getElementById("graph-open-page")!.addEventListener("click", () => {
+    if (state.selectedGraphNode) openNode(state.selectedGraphNode);
   });
+  document.querySelectorAll<HTMLButtonElement>("[data-graph-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const view = button.dataset.graphView as GraphView;
+      if (!button.disabled) void loadGraphView(view);
+    });
+  });
+
+  graphSearch.addEventListener("input", () => {
+    renderGraphSearchResults(graphSearch.value, (node) => {
+      graphSearch.value = node.displayName;
+      graphSearchResults.classList.add("hidden");
+      state.graphController?.focusNode(node.id);
+    });
+  });
+  graphSearch.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      const first = graphSearchResults.querySelector<HTMLButtonElement>("button[data-node-id]");
+      first?.click();
+    }
+    if (event.key === "Escape") {
+      graphSearch.value = "";
+      graphSearchResults.classList.add("hidden");
+    }
+  });
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !graphOverlay.classList.contains("hidden")) {
       closeGraph();
+    }
+    if (e.key === "/" && !graphOverlay.classList.contains("hidden") && !isEditableFocused()) {
+      e.preventDefault();
+      graphSearch.focus();
     }
     if ((e.key === "g" || e.key === "G") && !isEditableFocused()) {
       e.preventDefault();
@@ -166,6 +262,45 @@ async function main() {
       else closeGraph();
     }
   });
+
+  function renderGraphSearchResults(query: string, onSelect: (node: GraphNode) => void): void {
+    graphSearchResults.replaceChildren();
+    const needle = query.trim().toLocaleLowerCase();
+    if (!needle || !state.graphData) {
+      graphSearchResults.classList.add("hidden");
+      return;
+    }
+    const matches = state.graphData.nodes
+      .filter((node) => !state.hiddenGraphKinds.has(node.kind))
+      .filter((node) => {
+        const haystack = [node.displayName, node.qualifiedName, node.id, ...node.tags]
+          .join(" ")
+          .toLocaleLowerCase();
+        return haystack.includes(needle);
+      })
+      .sort((a, b) => b.degree - a.degree)
+      .slice(0, 8);
+
+    for (const node of matches) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.nodeId = node.id;
+      button.setAttribute("role", "option");
+      const title = document.createElement("strong");
+      title.textContent = node.displayName;
+      const context = document.createElement("span");
+      context.textContent = node.qualifiedName;
+      button.append(title, context);
+      button.addEventListener("click", () => onSelect(node));
+      graphSearchResults.append(button);
+    }
+    if (matches.length === 0) {
+      const empty = document.createElement("p");
+      empty.textContent = "No matching nodes";
+      graphSearchResults.append(empty);
+    }
+    graphSearchResults.classList.remove("hidden");
+  }
 
   // Feedback UI.
   installFeedbackUI({
@@ -181,6 +316,125 @@ function isEditableFocused(): boolean {
   if (!el) return false;
   const tag = el.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || (el as HTMLElement).isContentEditable;
+}
+
+const GRAPH_VIEW_COPY: Record<GraphView, string> = {
+  knowledge: "All compiled pages and the links between them.",
+  recent: "Pages touched in the latest activity window, weighted by recency.",
+  navigation: "The index structure as sections, pages and containment links.",
+  lineage: "How raw sources flow into summaries and durable knowledge pages.",
+  local: "The current page and its one-hop incoming and outgoing links.",
+};
+
+function setActiveGraphView(view: GraphView): void {
+  document.querySelectorAll<HTMLButtonElement>("[data-graph-view]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.graphView === view);
+  });
+  document.getElementById("graph-canvas-view")!.textContent = view.toUpperCase();
+  document.getElementById("graph-view-description")!.textContent = GRAPH_VIEW_COPY[view];
+}
+
+function updateGraphViewAvailability(availableViews: GraphView[]): void {
+  const available = new Set(availableViews);
+  document.querySelectorAll<HTMLButtonElement>("[data-graph-view]").forEach((button) => {
+    const view = button.dataset.graphView as GraphView;
+    button.disabled = !available.has(view);
+    button.title = button.disabled ? "This compiled graph is not available" : "";
+  });
+}
+
+function updateGraphOverview(data: GraphData): void {
+  document.getElementById("graph-stat-nodes")!.textContent = data.nodes.length.toLocaleString();
+  document.getElementById("graph-stat-edges")!.textContent = data.edges.length.toLocaleString();
+  const source = data.meta.source === "compiled" ? "Compiled .graph" : "Markdown fallback";
+  const date = data.meta.generatedAt ? new Date(data.meta.generatedAt) : null;
+  const generated = date && !Number.isNaN(date.valueOf())
+    ? ` · ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+    : "";
+  document.getElementById("graph-source-label")!.textContent = `${source}${generated}`;
+  document.getElementById("graph-view-description")!.textContent = GRAPH_VIEW_COPY[data.meta.view];
+  document.getElementById("graph-canvas-view")!.textContent = data.meta.view.toUpperCase();
+  const empty = document.getElementById("graph-empty")!;
+  empty.querySelector("strong")!.textContent = "No graph data";
+  empty.querySelector("span")!.textContent = "This view has no compiled nodes yet.";
+}
+
+function renderKindFilters(data: GraphData, onChange: () => void): void {
+  const container = document.getElementById("graph-kind-filters")!;
+  container.replaceChildren();
+  const counts = new Map<string, number>();
+  for (const node of data.nodes) counts.set(node.kind, (counts.get(node.kind) ?? 0) + 1);
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  for (const [kind, count] of sorted) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "graph-kind-filter";
+    button.dataset.kind = kind;
+    const dot = document.createElement("span");
+    dot.className = "graph-kind-dot";
+    dot.style.background = graphKindTone(kind);
+    const label = document.createElement("span");
+    label.textContent = kind.replace(/_/g, " ");
+    const value = document.createElement("b");
+    value.textContent = String(count);
+    button.append(dot, label, value);
+    button.addEventListener("click", () => {
+      if (state.hiddenGraphKinds.has(kind)) state.hiddenGraphKinds.delete(kind);
+      else state.hiddenGraphKinds.add(kind);
+      button.classList.toggle("excluded", state.hiddenGraphKinds.has(kind));
+      if (state.selectedGraphNode?.kind === kind && state.hiddenGraphKinds.has(kind)) {
+        state.selectedGraphNode = null;
+        renderGraphInspector(null);
+      }
+      onChange();
+    });
+    container.append(button);
+  }
+}
+
+function renderGraphInspector(node: GraphNode | null): void {
+  const empty = document.getElementById("graph-inspector-empty")!;
+  const detail = document.getElementById("graph-inspector-detail")!;
+  empty.classList.toggle("hidden", Boolean(node));
+  detail.classList.toggle("hidden", !node);
+  if (!node) return;
+
+  document.getElementById("graph-inspector-kind")!.textContent = node.kind.replace(/_/g, " ").toUpperCase();
+  document.getElementById("graph-inspector-title")!.textContent = node.displayName;
+  document.getElementById("graph-inspector-path")!.textContent = node.qualifiedName || node.id;
+  const summary = document.getElementById("graph-inspector-summary")!;
+  summary.textContent = node.summary || "No summary is available in this graph artifact.";
+  summary.classList.toggle("muted", !node.summary);
+  document.getElementById("graph-inspector-in")!.textContent = String(node.inbound);
+  document.getElementById("graph-inspector-out")!.textContent = String(node.outbound);
+  document.getElementById("graph-inspector-degree")!.textContent = String(node.degree);
+
+  const tags = document.getElementById("graph-inspector-tags")!;
+  tags.replaceChildren();
+  for (const value of node.tags.slice(0, 8)) {
+    const tag = document.createElement("span");
+    tag.textContent = value;
+    tags.append(tag);
+  }
+
+  const openButton = document.getElementById("graph-open-page") as HTMLButtonElement;
+  openButton.disabled = !node.navigable;
+  openButton.classList.toggle("hidden", !node.navigable);
+}
+
+function graphKindTone(kind: string): string {
+  const tones: Record<string, string> = {
+    index: "#ffffff",
+    concept: "#f4f4f5",
+    synthesis: "#e4e4e7",
+    entity: "#d4d4d8",
+    summary: "#a1a1aa",
+    raw_source: "#71717a",
+    recent: "#ffffff",
+    section: "#8b8b94",
+    page: "#b7b7bd",
+  };
+  return tones[kind] ?? "#8b8b94";
 }
 
 async function loadPage(pathArg: string): Promise<void> {
