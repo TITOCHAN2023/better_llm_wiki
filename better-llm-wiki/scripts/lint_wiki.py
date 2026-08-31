@@ -1411,6 +1411,123 @@ def recent_bucket_for_age(age_days: int) -> str | None:
     return None
 
 
+def git_recent_fallback_entries(
+    root_path: Path,
+    today,
+    history_days: int,
+) -> list[dict[str, object]]:
+    """Recover recent page activity from git commits that omitted log files.
+
+    Operation logs remain the primary source. A commit that changes any
+    ``log/YYYYMMDD.md`` file is therefore skipped here to avoid duplicating a
+    properly logged operation. This fallback exists for old or third-party
+    checkpoints that changed ``wiki/`` without following the log protocol.
+
+    The lookup only engages when the wiki root is the git repository root, the
+    same boundary used by git-first incremental lint. That keeps returned paths
+    unambiguous and avoids guessing prefixes for nested repositories.
+    """
+    if git_toplevel(root_path) != root_path.resolve():
+        return []
+    try:
+        result = subprocess.run(
+            [
+                "git", "-C", str(root_path), "-c", "core.quotepath=false",
+                "log", f"--since={history_days} days ago", "--no-renames",
+                "--format=%x1e%H%x1f%cI%x1f%s", "--name-only", "--",
+                "wiki", "raw", "log",
+            ],
+            check=False, capture_output=True, text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if result.returncode != 0:
+        return []
+
+    entries: list[dict[str, object]] = []
+    known_ops = {"ingest", "compile", "query", "promote", "lint", "audit", "split", "scaffold", "checkpoint"}
+    for block in result.stdout.split("\x1e"):
+        block = block.strip()
+        if not block:
+            continue
+        lines = block.splitlines()
+        header = lines[0].split("\x1f", 2)
+        if len(header) != 3:
+            continue
+        commit, committed_at, subject = (part.strip() for part in header)
+        files = [line.strip() for line in lines[1:] if line.strip()]
+        if any(LOG_FILENAME_RE.match(Path(rel).name) and rel.startswith("log/") for rel in files):
+            continue
+        touched = sorted({
+            rel for rel in files
+            if rel.startswith("wiki/") and rel.endswith(".md") and not rel.endswith(".md.graph")
+        })
+        if not touched:
+            continue
+        try:
+            committed_dt = datetime.fromisoformat(committed_at.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        commit_date = committed_dt.date()
+        age_days = (today - commit_date).days
+        bucket = recent_bucket_for_age(age_days)
+        if bucket is None:
+            continue
+        prefix, separator, remainder = subject.partition(":")
+        explicit_op = prefix.strip().lower() if separator else ""
+        if explicit_op in known_ops:
+            op = explicit_op
+            title = remainder.strip() or subject
+        elif any(rel.startswith("raw/") for rel in files):
+            op = "ingest"
+            title = subject
+        else:
+            op = "checkpoint"
+            title = subject
+        entries.append({
+            "id": f"git-commit:{commit}",
+            "date": commit_date.isoformat(),
+            "ageDays": age_days,
+            "bucket": bucket,
+            "time": committed_dt.strftime("%H:%M"),
+            "op": op,
+            "title": title,
+            "logPath": "",
+            "anchor": f"git-{commit[:12]}",
+            "touched": touched,
+            "body": "",
+            "commit": commit,
+            "source": "git",
+        })
+    return entries
+
+
+def load_recent_node_metadata(root_path: Path, rel_id: str) -> dict[str, object] | None:
+    """Load one explicitly-touched page without scanning the whole wiki."""
+    if not rel_id.startswith("wiki/") or not rel_id.endswith(".md"):
+        return None
+    page_path = root_path / rel_id
+    if not page_path.is_file():
+        return None
+    sidecar = load_json_file(Path(f"{page_path}.graph"), {})
+    if isinstance(sidecar, dict) and sidecar.get("id") == rel_id:
+        return sidecar
+    try:
+        text = page_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    frontmatter = parse_frontmatter(text) or {}
+    title = extract_page_title(text, page_path.stem)
+    return {
+        "id": rel_id,
+        "title": title,
+        "kind": infer_page_kind(rel_id, frontmatter),
+        "tags": ensure_string_list(frontmatter.get("tags")),
+        "summary": extract_page_summary(text),
+        **build_display_metadata(rel_id, title),
+    }
+
+
 def build_recent_log_graph(
     root_path: Path,
     nodes: dict[str, dict[str, object]],
@@ -1418,17 +1535,17 @@ def build_recent_log_graph(
 ) -> dict[str, object]:
     log_dir = root_path / "log"
     entries: list[dict[str, object]] = []
-    if not log_dir.exists() or not log_dir.is_dir():
-        return {"schema": 1, "entries": [], "nodes": [], "edges": []}
+    node_catalog = dict(nodes)
 
     log_files = []
-    for log_file in sorted(log_dir.glob("*.md"), reverse=True):
-        m = LOG_FILENAME_RE.match(log_file.name)
-        if not m:
-            continue
-        date = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
-        log_date = datetime.strptime(date, "%Y-%m-%d").date()
-        log_files.append((date, log_date, log_file))
+    if log_dir.exists() and log_dir.is_dir():
+        for log_file in sorted(log_dir.glob("*.md"), reverse=True):
+            m = LOG_FILENAME_RE.match(log_file.name)
+            if not m:
+                continue
+            date = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+            log_date = datetime.strptime(date, "%Y-%m-%d").date()
+            log_files.append((date, log_date, log_file))
 
     today = datetime.now().astimezone().date()
     bucket_by_date: dict[str, str] = {}
@@ -1487,6 +1604,8 @@ def build_recent_log_graph(
                 body_lines.append(line)
         flush()
 
+    git_entries = git_recent_fallback_entries(root_path, today, history_days)
+    entries.extend(git_entries)
     entries.sort(key=lambda item: (str(item["date"]), str(item["time"]), str(item["id"])), reverse=True)
     recent_entries = entries
 
@@ -1526,13 +1645,19 @@ def build_recent_log_graph(
             "anchor": entry["anchor"],
             "d": depth,
         }
+        for optional_key in ("commit", "source"):
+            if entry.get(optional_key):
+                entry_meta[optional_key] = entry[optional_key]
         if bucket in bucket_entries_by_id:
             bucket_entries_by_id[bucket].append(entry_meta)
         valid_touched: list[str] = []
         for target in entry.get("touched", []):
             target_id = str(target)
-            if target_id not in nodes:
-                continue
+            if target_id not in node_catalog:
+                recovered = load_recent_node_metadata(root_path, target_id)
+                if recovered is None:
+                    continue
+                node_catalog[target_id] = recovered
             valid_touched.append(target_id)
             touched_ids.add(target_id)
             touched_meta[target_id].append(entry_meta)
@@ -1565,15 +1690,15 @@ def build_recent_log_graph(
         entry["nodes"] = [
             {
                 "id": target,
-                "displayName": nodes[target].get("displayName", nodes[target].get("title", target)),
-                "qualifiedName": nodes[target].get("qualifiedName", target),
-                "kind": nodes[target].get("kind", "page"),
+                "displayName": node_catalog[target].get("displayName", node_catalog[target].get("title", target)),
+                "qualifiedName": node_catalog[target].get("qualifiedName", target),
+                "kind": node_catalog[target].get("kind", "page"),
             }
             for target in valid_touched
         ]
 
     page_nodes = []
-    for rel_id, data in sorted(nodes.items()):
+    for rel_id, data in sorted(node_catalog.items()):
         if rel_id not in touched_ids:
             continue
         entry_meta = sorted(
@@ -1617,13 +1742,17 @@ def build_recent_log_graph(
 
     edges = sorted(edge_map.values(), key=lambda item: (str(item["s"]), str(item["t"])))
     all_bucket_ids = RECENT_BUCKET_IDS + ["floating"]
-    dates_by_bucket = {
-        bucket: [
+    dates_by_bucket: dict[str, list[str]] = {}
+    for bucket in all_bucket_ids:
+        dates = {
             date for date, _, _ in log_files
             if bucket_by_date.get(date) == bucket
-        ]
-        for bucket in all_bucket_ids
-    }
+        }
+        dates.update(
+            str(entry["date"]) for entry in git_entries
+            if entry.get("bucket") == bucket
+        )
+        dates_by_bucket[bucket] = sorted(dates, reverse=True)
     ranges: dict[str, dict[str, object]] = {}
     for i, bid in enumerate(RECENT_BUCKET_IDS):
         start = i * RECENT_BUCKET_DAYS
@@ -1649,12 +1778,31 @@ def build_recent_log_graph(
             "datesByBucket": dates_by_bucket,
             "availableLogDays": len(log_files),
             "includedLogDays": len(included_log_files),
+            "gitFallbackCommits": len(git_entries),
             "entryLimit": None,
             "touchedNodeLimit": None,
         },
         "entries": recent_entries,
         "nodes": bucket_control_nodes + page_nodes,
         "edges": edges,
+    }
+
+
+def refresh_recent_graph_artifact(root_path: Path) -> dict[str, int]:
+    """Refresh only ``graph/recent.graph`` without a full-corpus graph pass."""
+    root_path = root_path.resolve()
+    raw_nodes = load_json_file(root_path / "graph" / "nodes.graph", [])
+    nodes: dict[str, dict[str, object]] = {}
+    if isinstance(raw_nodes, list):
+        for item in raw_nodes:
+            if isinstance(item, dict) and isinstance(item.get("id"), str):
+                nodes[str(item["id"])] = item
+    payload = build_recent_log_graph(root_path, nodes)
+    atomic_write_json_semantic(root_path / "graph" / "recent.graph", payload, {"generatedAt"})
+    return {
+        "entries": len(payload.get("entries", [])),
+        "nodes": len(payload.get("nodes", [])),
+        "edges": len(payload.get("edges", [])),
     }
 
 
@@ -2534,6 +2682,12 @@ def lint(root: str, changed_only: bool = True) -> int:
             scale_issues = scale_issue_payload(root_path, md_scale)
             if not changed_file_set and not deleted_changed_pages:
                 print(f"✅ Changed-only lint: no changed wiki Markdown files ({source})")
+                recent_stats = refresh_recent_graph_artifact(root_path)
+                print(
+                    "✅ Recent activity graph refreshed "
+                    f"({recent_stats['entries']} entries, {recent_stats['nodes']} nodes, "
+                    f"{recent_stats['edges']} edges)"
+                )
                 write_last_lint_head(root_path, git_head_to_record)
                 return 0
         else:
@@ -2547,6 +2701,12 @@ def lint(root: str, changed_only: bool = True) -> int:
             changed_file_set = {p for p in changed_files if p in wiki_file_set}
             if not changed_file_set and not deleted_changed_pages:
                 print(f"✅ Changed-only lint: no changed wiki Markdown files ({source})")
+                recent_stats = refresh_recent_graph_artifact(root_path)
+                print(
+                    "✅ Recent activity graph refreshed "
+                    f"({recent_stats['entries']} entries, {recent_stats['nodes']} nodes, "
+                    f"{recent_stats['edges']} edges)"
+                )
                 write_md_stat_cache(root_path, md_scale)
                 return 0
         if not print_scale_preflight(
@@ -3033,6 +3193,12 @@ def lint(root: str, changed_only: bool = True) -> int:
         print(
             "✅ Scoped graph sidecars refreshed "
             f"({scoped_graph_stats['sidecars']} page-local sidecars; global graph skipped)"
+        )
+        recent_stats = refresh_recent_graph_artifact(root_path)
+        print(
+            "✅ Recent activity graph refreshed "
+            f"({recent_stats['entries']} entries, {recent_stats['nodes']} nodes, "
+            f"{recent_stats['edges']} edges)"
         )
         if issues == 0 and use_stat_cache:
             write_md_stat_cache(root_path, md_scale)

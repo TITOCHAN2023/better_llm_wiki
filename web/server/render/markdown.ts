@@ -245,11 +245,21 @@ function resolveInternalTarget(
   wikiRoot: string,
   currentFilePath?: string,
 ): string | null {
-  const normalized = path.posix.normalize(rawPath);
-  if (path.posix.isAbsolute(normalized)) return null;
+  // A leading slash is the wiki content-root anchor, not an OS absolute path.
+  // `/summaries/Foo.md` therefore means `<wikiRoot>/wiki/summaries/Foo.md`.
+  // Reject `..` before normalising so `/../SCHEMA.md` cannot silently collapse
+  // into a repository-root path.
+  if (rawPath.split("/").includes("..")) return null;
+  const contentRootAnchored = rawPath.startsWith("/");
+  const normalized = path.posix.normalize(
+    contentRootAnchored ? rawPath.replace(/^\/+/, "") : rawPath,
+  );
+  if (!normalized || normalized === "." || path.posix.isAbsolute(normalized)) return null;
 
   const candidates: string[] = [];
-  if (normalized.startsWith("wiki/")) {
+  if (contentRootAnchored) {
+    candidates.push(path.posix.normalize(`wiki/${normalized}`));
+  } else if (normalized.startsWith("wiki/")) {
     candidates.push(normalized);
   } else {
     if (currentFilePath?.startsWith("wiki/")) {

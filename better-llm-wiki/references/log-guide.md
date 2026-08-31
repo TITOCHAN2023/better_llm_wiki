@@ -52,6 +52,9 @@ Rules:
 | `audit`    | Feedback applied and moved to `audit/resolved/` | `## [14:30] audit \| resolved 20260409-143022-a1b2` |
 | `split`    | A single page split into a folder | `## [10:00] split \| Example System → example-system/` |
 | `scaffold` | Initial wiki setup | `## [08:00] scaffold \| Initialized Topic knowledge base` |
+| `checkpoint` | Compatibility fallback when `commit_wiki.py` receives unlogged wiki changes | `## [08:10] checkpoint \| automatic checkpoint — wiki (2)` |
+
+`commit_wiki.py` augments the current operation entry with explicit content-root links for every changed wiki page. If no current entry exists, it synthesizes an `ingest` fallback when `raw/` changed, otherwise a `checkpoint` fallback. This keeps `recent.graph` recoverable without weakening the requirement that normal agents write the real operation log before linting.
 
 ## Quick grep
 

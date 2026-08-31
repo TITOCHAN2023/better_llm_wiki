@@ -408,7 +408,7 @@ Incremental rule (the default): without `--full`, lint detects modified `wiki/**
 - **Git-first (O(changes), the scale path)** — when the wiki root *is* a git repo root. Changes = `git status` (working tree) ∪ `git diff <last-linted-commit> HEAD` (anything committed since the last lint, e.g. from `git pull`/checkout). The last-linted commit is a one-line sidecar (`.graph-cache/last-lint-head.graph`). **No whole-corpus stat sweep** — peak memory and time track the number of *changed* pages, not corpus size, so a one-page edit lints in ~1s at ~50 MB whether the wiki holds 1k or 10M pages. This is why a git-backed wiki scales to tens of GB without the daily path degrading. (Each wiki should be its own git repo so this engages — see "Each wiki is its own git repo" below.)
 - **Stat-cache fallback (O(corpus))** — when the wiki is not in git, or is nested inside a larger repo. Changes = `git status` ∪ `.graph-cache/md-file-stats.graph` (a per-page stat snapshot vs the last lint, which catches pull/checkout deltas). This must stat every page, so its memory grows with corpus size — fine for small/medium wikis, and why large wikis should be their own git repo.
 
-Either way it reads only the changed pages, runs local link/source/marker checks, writes the page-local `.md.graph` sidecar for each, and intentionally skips global graph compilation, orphan checks, and full index coverage. The full-corpus byte limit does not block incremental lint; only oversized changed pages do. Use `--full` after deletes/renames, before publishing, or whenever global graph/index freshness matters.
+Either way it reads only the changed pages, runs local link/source/marker checks, writes the page-local `.md.graph` sidecar for each, and refreshes the small `graph/recent.graph` activity view. It intentionally skips the other global graph artifacts, orphan checks, and full index coverage. The full-corpus byte limit does not block incremental lint; only oversized changed pages do. Use `--full` after deletes/renames, before publishing, or whenever global graph/index freshness matters.
 
 The script reports:
 - **Open audit preflight** — blocks full lint while user feedback is waiting in `audit/*.md`
@@ -427,7 +427,7 @@ The script reports:
 `lint` also owns graph compilation:
 - Rebuild page-local `wiki/**/*.md.graph` sidecars for changed pages
 - Rebuild global `graph/*.graph` artifacts for full/local graph views
-- Rebuild `graph/recent.graph` from the latest 10 operation log entries
+- Rebuild `graph/recent.graph` from recent operation logs, with a git-checkpoint fallback for historical commits that omitted a log entry
 - Rebuild `graph/navigation.graph` from `wiki/index.md`
 - Rebuild `graph/lineage.graph` from raw sources, `sources`, and summary links
 - Rebuild `graph/settings.graph` with graph-viewer defaults and type-affinity hints
@@ -437,7 +437,7 @@ The script reports:
 - Treat `.graph` files as derived artifacts; never edit them by hand
 
 Graph artifacts are mode-scoped:
-- Incremental mode (the default, no flag) writes only page-local `.md.graph` sidecars for the changed Markdown lint scope.
+- Incremental mode (the default, no flag) writes page-local `.md.graph` sidecars for the changed Markdown lint scope and always refreshes `graph/recent.graph`; it does not rebuild the other global graph files.
 - Full lint rewrites only dirty page sidecars; global graph files use atomic semantic writes so unchanged payloads are not rewritten merely because timestamps would change.
 
 Read `references/graph-guide.md` before changing this protocol.
@@ -495,7 +495,7 @@ See `references/audit-guide.md` for the full audit file format.
 | `scripts/audit_review.py` | Group open/resolved audits by target file |
 | `scripts/audit_cr.py` | Build the periodic contradiction/correction register under `outputs/audit-cr/` from human-filed `audit/*.md` |
 | `scripts/ingest_scan.py` | Sliding-window audit: scope a fresh ingest's 1-hop neighborhood as a reading list; `--audited-state-file` persists progress and reports only each round's increment until convergence. (`--help` for seed detection) |
-| `scripts/commit_wiki.py` | Checkpoint truth-source paths into git as the final step of a write op — stages only SCHEMA/INTEREST/wiki/raw/audit/log (never `git add -A`), message auto-derived from the log, tags `ckpt/<op>/<ts>`. No-op outside git. |
+| `scripts/commit_wiki.py` | Checkpoint truth-source paths into git as the final step of a write op — stages only SCHEMA/INTEREST/wiki/raw/audit/log (never `git add -A`), backfills a missing log entry with explicit touched-page links, refreshes `recent.graph`, derives the message from the log, and tags `ckpt/<op>/<ts>`. No-op outside git. |
 | `scripts/rollback_wiki.py` | Safely list/undo checkpoints: `--list`, `--undo <ref>` (revert one checkpoint's content as a forward commit), `--to <ref>`, `--prune-tags`. Never rewrites history or touches `log/`; refuses on a dirty tree. |
 | [qmd](https://github.com/tobi/qmd) | Optional local semantic search (useful at >100 pages) |
 
@@ -535,7 +535,7 @@ The LLM rebuilds `index.md` on every compile and touches it on every ingest. Org
 
 ## `log/` format
 
-One file per day `log/YYYYMMDD.md`, **no frontmatter**, first line is the H1 date (`# 2026-04-09`), then one `## [HH:MM] <op> | <one-line>` per entry (`op` ∈ compile/ingest/query/lint/audit/promote/split/scaffold). `lint` enforces the shape because recent-activity graph compilation reads logs directly. Full convention + grep recipes: `references/log-guide.md`.
+One file per day `log/YYYYMMDD.md`, **no frontmatter**, first line is the H1 date (`# 2026-04-09`), then one `## [HH:MM] <op> | <one-line>` per entry (`op` ∈ compile/ingest/query/lint/audit/promote/split/scaffold/checkpoint). `checkpoint` is only the compatibility fallback emitted by `commit_wiki.py` when a caller omitted the real operation log. `lint` enforces the shape because recent-activity graph compilation reads logs directly. Full convention + grep recipes: `references/log-guide.md`.
 
 ## Active skill sync
 

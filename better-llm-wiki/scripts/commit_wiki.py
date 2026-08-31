@@ -13,9 +13,11 @@ Usage:
 Behavior:
   - If wiki-root is not under git → skip with a notice, exit 0.
   - If nothing to commit → skip silently, exit 0 (no empty commits).
-  - Default commit message: parsed from the latest entry in log/<today>.md
-    (e.g. "ingest: acc — ACC 论文 (touched 7 pages)"); falls back to a
-    dir-summary checkpoint line if no log entry today.
+  - Ensures the current operation has a log/<today>.md entry with explicit
+    links to every changed wiki page. If the caller omitted the log entry, a
+    backward-compatible ingest/checkpoint entry is synthesized before staging.
+  - Default commit message: parsed from that latest log entry
+    (e.g. "ingest: acc — ACC 论文 (touched 7 pages)").
   - --message overrides the auto-generated message.
   - --include-derived also stages graph/ and .query-index/wiki.db
     (default excludes these — they're regenerable; use only if you want
@@ -45,6 +47,7 @@ from pathlib import Path
 TRUTH_PATHS = ["SCHEMA.md", "INTEREST.md", "wiki/", "raw/", "audit/", "log/"]
 DERIVED_PATHS = ["graph/", ".query-index/wiki.db"]
 LOG_ENTRY_RE = re.compile(r"^##\s+\[(\d{2}:\d{2})\]\s+([a-zA-Z0-9_-]+)\s+\|\s+(.+?)\s*$")
+KNOWN_OPS = {"ingest", "compile", "query", "promote", "lint", "audit", "split", "scaffold", "checkpoint"}
 
 
 def is_git_repo(root: Path) -> bool:
@@ -143,6 +146,86 @@ def auto_message(root: Path, changed: list[str]) -> str:
     return f"wiki checkpoint: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
 
 
+def infer_operation(message: str | None, changed: list[str]) -> tuple[str, str]:
+    """Infer only the fallback log shape; explicit log entries remain primary."""
+    if message:
+        prefix, separator, remainder = message.partition(":")
+        explicit = prefix.strip().lower() if separator else ""
+        if explicit in KNOWN_OPS:
+            return explicit, remainder.strip() or message.strip()
+    if any(rel.startswith("raw/") for rel in changed):
+        op = "ingest"
+    else:
+        op = "checkpoint"
+    counts: dict[str, int] = {}
+    for rel in changed:
+        head = rel.split("/", 1)[0] if "/" in rel else rel
+        if head == "log":
+            continue
+        counts[head] = counts.get(head, 0) + 1
+    summary = ", ".join(f"{key} ({value})" for key, value in sorted(counts.items()))
+    title = message.strip() if message else f"automatic {op} checkpoint"
+    if summary:
+        title = f"{title} — {summary}"
+    return op, title
+
+
+def changed_wiki_pages(changed: list[str]) -> list[str]:
+    return sorted({
+        rel for rel in changed
+        if rel.startswith("wiki/") and rel.endswith(".md") and not rel.endswith(".md.graph")
+    })
+
+
+def render_touched_page(rel: str) -> str:
+    label = Path(rel).stem
+    content_root = "/" + rel.removeprefix("wiki/")
+    return f"- Touched: [{label}](<{content_root}>)"
+
+
+def ensure_activity_log(root: Path, changed: list[str], message: str | None) -> bool:
+    """Guarantee that a checkpoint leaves enough data to rebuild recent.graph.
+
+    If today's log file is already part of the working-tree change, its latest
+    entry belongs to the operation being committed and is augmented in place.
+    Otherwise a new fallback entry is appended. Returns True when the log file
+    changed.
+    """
+    now = datetime.now().astimezone()
+    compact = now.strftime("%Y%m%d")
+    iso = now.strftime("%Y-%m-%d")
+    rel_log = f"log/{compact}.md"
+    log_path = root / rel_log
+    pages = changed_wiki_pages(changed)
+
+    existing = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+
+    if not existing:
+        existing = f"# {iso}\n"
+
+    current_entry_is_changed = rel_log in changed and latest_log_entry(root) is not None
+    additions: list[str] = []
+    for page in pages:
+        content_root = "/" + page.removeprefix("wiki/")
+        if page in existing or content_root in existing:
+            continue
+        additions.append(render_touched_page(page))
+
+    if current_entry_is_changed:
+        if not additions:
+            return False
+        rendered = existing.rstrip() + "\n" + "\n".join(additions) + "\n"
+    else:
+        op, title = infer_operation(message, changed)
+        entry = [f"## [{now.strftime('%H:%M')}] {op} | {title}"]
+        entry.extend(render_touched_page(page) for page in pages)
+        rendered = existing.rstrip() + "\n\n" + "\n".join(entry) + "\n"
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(rendered, encoding="utf-8")
+    return True
+
+
 def run_git(root: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", "-C", str(root), *args],
@@ -230,14 +313,38 @@ def main(argv: list[str]) -> int:
         print("skipped: nothing to commit (wiki state is clean)", file=sys.stderr)
         return 0
 
-    message = args.message or auto_message(root, changed)
-
     if args.dry_run:
+        message = args.message or auto_message(root, changed)
         print("would stage these paths:")
         for p in changed:
             print(f"  + {p}")
         print(f"would commit with message: {message!r}")
         return 0
+
+    try:
+        activity_updated = ensure_activity_log(root, changed, args.message)
+    except OSError as exc:
+        print(f"error: couldn't update the activity log: {exc}", file=sys.stderr)
+        return 3
+    if activity_updated:
+        print("✓ activity log updated with explicit touched wiki pages")
+        paths = existing_paths(root, TRUTH_PATHS + (DERIVED_PATHS if args.include_derived else []))
+        changed = changed_under(root, paths)
+
+    message = args.message or auto_message(root, changed)
+
+    try:
+        from lint_wiki import refresh_recent_graph_artifact
+        recent = refresh_recent_graph_artifact(root)
+        print(
+            "✓ refreshed graph/recent.graph "
+            f"({recent['entries']} entries, {recent['nodes']} nodes, {recent['edges']} edges)"
+        )
+    except Exception as exc:  # derived refresh must not block a truth-source checkpoint
+        print(f"note: couldn't refresh graph/recent.graph: {exc}", file=sys.stderr)
+    if args.include_derived:
+        paths = existing_paths(root, TRUTH_PATHS + DERIVED_PATHS)
+        changed = changed_under(root, paths)
 
     # Stage only the configured prefixes (unrelated uncommitted work stays put).
     add = run_git(root, "add", "--", *paths)
@@ -261,6 +368,7 @@ def main(argv: list[str]) -> int:
             print(f"  tagged {tag}")
         else:
             print("  note: couldn't create a checkpoint tag (commit is fine)", file=sys.stderr)
+
     return 0
 
 

@@ -79,8 +79,9 @@ wiki's history is auditable.
   incremental by default. Priority order: (1) block if `audit/` has unprocessed
   feedback; (2) error on oversized pages / page-count guard; (3) hard errors on
   dead links, `../`, missing `/`, missing frontmatter; (4) soft signals for
-  possible contradictions and cross-page numeric conflicts; (5) recompile the
-  `graph/` artifacts. **The dividing line: what a machine can be 100 % sure of is
+  possible contradictions and cross-page numeric conflicts; (5) refresh page
+  sidecars and `recent.graph` incrementally, reserving the remaining global
+  graph artifacts for `--full`. **The dividing line: what a machine can be 100 % sure of is
   a hard error; what needs judgment is a soft signal handed to the agent.**
 - **`audit` (correct)** — the quality net (below). Machine-run day to day; humans
   step in only to file a correction.
@@ -152,7 +153,7 @@ demo-graph-viewer.html ← zero-dependency local .graph viewer
 - **`lint_wiki.py`** — validate the wiki (dead links, orphans, index coverage, audit shape) and compile the `.graph` artifacts. Incremental by default.
 - **`ingest_scan.py`** — scope a fresh ingest's 1-hop neighborhood as a sliding-window audit reading list.
 - **`audit_cr.py`** — build a correction/contradiction register from open and resolved audits.
-- **`commit_wiki.py`** / **`rollback_wiki.py`** — checkpoint the truth-source state into git, and roll a checkpoint back.
+- **`commit_wiki.py`** / **`rollback_wiki.py`** — checkpoint the truth-source state into git, backfill a missing activity-log entry with explicit touched-page links, refresh `recent.graph`, and roll a checkpoint back.
 - **`migrate_okf.py`** — canonicalize an existing wiki to the OKF-style representation (rewrite `wiki/…` links to `/…`, backfill `type`). Optional and idempotent — the scripts recognize both forms.
 
 ## Scaling — from tens of MB to tens of GB without crashing
