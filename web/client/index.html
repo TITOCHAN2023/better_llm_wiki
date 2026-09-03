@@ -4,6 +4,18 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LLM Wiki</title>
+    <script>
+      (() => {
+        const key = "llm-wiki-theme";
+        let stored = null;
+        try { stored = localStorage.getItem(key); } catch {}
+        const theme = stored === "light" || stored === "dark"
+          ? stored
+          : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
     <link rel="preconnect" href="https://rsms.me/" />
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
     <link rel="stylesheet" href="/assets/styles.css" />
@@ -16,6 +28,9 @@
         <span id="wiki-title"></span>
       </div>
       <div class="topbar-right">
+        <button id="btn-theme" class="btn btn-icon btn-ghost" type="button" aria-label="Switch color theme" title="Switch color theme">
+          <span id="theme-icon" aria-hidden="true">☀</span>
+        </button>
         <button id="btn-graph" class="btn" type="button" title="Knowledge graph (G)">
           <span>⬡</span> Graph
         </button>
@@ -25,9 +40,36 @@
 
     <aside id="sidebar-left" class="glass">
       <header>
-        <h1>Navigation</h1>
+        <div class="local-graph-heading">
+          <h1>Connections</h1>
+          <span id="local-graph-count">Current page</span>
+        </div>
+        <button
+          id="local-graph-expand"
+          class="local-graph-expand"
+          type="button"
+          title="Open the current-page graph"
+          aria-label="Open the current-page graph"
+        >
+          ↗
+        </button>
       </header>
-      <nav id="tree"><p class="loading">Loading tree</p></nav>
+      <div class="local-graph-stage">
+        <div class="graph-grid" aria-hidden="true"></div>
+        <span class="local-graph-zone local-graph-zone-in">INCOMING</span>
+        <span class="local-graph-zone local-graph-zone-out">OUTGOING</span>
+        <svg id="local-graph-svg" aria-label="Incoming and outgoing links for the current page"></svg>
+        <div id="local-graph-loading" class="local-graph-state loading">Loading graph</div>
+        <div id="local-graph-empty" class="local-graph-state hidden">
+          <strong>No connections</strong>
+          <span>This page has no compiled local graph.</span>
+        </div>
+      </div>
+      <div class="local-graph-legend" aria-label="Connection direction legend">
+        <span class="incoming"><i></i><span>Links to this page</span><b id="local-graph-in">—</b></span>
+        <span class="outgoing"><i></i><span>Linked from this page</span><b id="local-graph-out">—</b></span>
+      </div>
+      <p class="local-graph-hint">Click a node to open the document. Arrows show link direction.</p>
     </aside>
 
     <main>
@@ -162,6 +204,10 @@
               <div><strong id="graph-inspector-degree">0</strong><span>total</span></div>
             </div>
             <div id="graph-inspector-tags" class="graph-inspector-tags"></div>
+            <div id="graph-inspector-sources" class="graph-inspector-sources hidden">
+              <span class="graph-panel-label">Original sources</span>
+              <div id="graph-inspector-source-links" class="graph-inspector-source-links"></div>
+            </div>
             <button id="graph-open-page" class="graph-open-page" type="button">Open document <span>↗</span></button>
           </div>
         </aside>

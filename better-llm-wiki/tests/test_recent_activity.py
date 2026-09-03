@@ -58,7 +58,25 @@ class RecentActivityTests(unittest.TestCase):
     def test_recent_recovers_unlogged_ingest_from_git(self) -> None:
         root = self.make_wiki()
         write(root, "raw/articles/source.md", "source\n")
-        write(root, "wiki/summaries/中文总结.md", "# 中文总结\n")
+        write(
+            root,
+            "wiki/summaries/中文总结.md",
+            """---
+title: "中文总结"
+type: summary
+created: 2026-09-02
+updated: 2026-09-02
+sources:
+  - raw/articles/source.md
+source_urls:
+  - https://example.com/original
+tags:
+  - provenance
+---
+
+# 中文总结
+""",
+        )
         git(root, "add", "raw", "wiki")
         git(root, "commit", "-q", "-m", "wiki checkpoint: raw (1), wiki (1)")
 
@@ -72,6 +90,12 @@ class RecentActivityTests(unittest.TestCase):
         self.assertEqual(len(recovered), 1)
         self.assertEqual(recovered[0]["op"], "ingest")
         self.assertEqual(recovered[0]["touched"], ["wiki/summaries/中文总结.md"])
+        recent_node = next(
+            node for node in payload["nodes"]
+            if node["id"] == "wiki/summaries/中文总结.md"
+        )
+        self.assertEqual(recent_node["sourceUrls"], ["https://example.com/original"])
+        self.assertEqual(recent_node["tags"], ["provenance"])
 
     def test_commit_synthesizes_log_paths_and_refreshes_recent(self) -> None:
         root = self.make_wiki()

@@ -29,7 +29,13 @@ test("knowledge view reads compiled nodes and compact edge shards", (t) => {
     statsFile: "stats.graph",
   });
   writeJson(root, "graph/nodes.graph", [
-    { id: "wiki/concepts/A.md", kind: "concept", displayName: "Alpha", summary: "First" },
+    {
+      id: "wiki/concepts/A.md",
+      kind: "concept",
+      displayName: "Alpha",
+      summary: "First",
+      sourceUrls: ["https://example.com/source", "javascript:alert(1)"],
+    },
     { id: "wiki/concepts/B.md", kind: "entity", displayName: "Beta" },
     { id: "wiki/concepts/Q.md", kind: "query", displayName: "Hidden" },
   ]);
@@ -44,6 +50,7 @@ test("knowledge view reads compiled nodes and compact edge shards", (t) => {
   assert.equal(graph.meta.source, "compiled");
   assert.equal(graph.meta.layout, "forceatlas2");
   assert.deepEqual(graph.nodes.map((node) => node.displayName), ["Alpha", "Beta"]);
+  assert.deepEqual(graph.nodes[0]?.sourceUrls, ["https://example.com/source"]);
   assert.deepEqual(graph.edges, [
     { source: "wiki/concepts/A.md", target: "wiki/concepts/B.md", kind: "links_to", weight: 2, depth: 0.8 },
   ]);
@@ -51,13 +58,14 @@ test("knowledge view reads compiled nodes and compact edge shards", (t) => {
   assert.equal(graph.nodes[1]?.inbound, 1);
 });
 
-test("local view normalizes a page sidecar and enriches neighbor metadata", (t) => {
+test("local view returns incoming and outgoing neighbors with direction intact", (t) => {
   const root = makeWiki();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   writeJson(root, "graph/manifest.graph", { nodesFile: "nodes.graph" });
   writeJson(root, "graph/nodes.graph", [
     { id: "wiki/concepts/A.md", kind: "concept", displayName: "Alpha" },
     { id: "wiki/concepts/B.md", kind: "summary", displayName: "Beta summary", tags: ["demo"] },
+    { id: "wiki/concepts/C.md", kind: "concept", displayName: "Gamma" },
   ]);
   writeJson(root, "wiki/concepts/A.md.graph", {
     schema: 1,
@@ -66,16 +74,25 @@ test("local view normalizes a page sidecar and enriches neighbor metadata", (t) 
     displayName: "Alpha",
     summary: "Local center",
     ego: {
-      in: [],
+      in: [{ from: "wiki/concepts/C.md", kind: "links_to" }],
       out: [{ to: "wiki/concepts/B.md", kind: "mentions" }],
     },
   });
 
   const graph = buildGraph(root, "local", "/concepts/A.md");
-  assert.equal(graph.nodes.length, 2);
+  assert.equal(graph.nodes.length, 3);
   assert.equal(graph.nodes.find((node) => node.id.endsWith("B.md"))?.displayName, "Beta summary");
+  assert.equal(graph.nodes.find((node) => node.id.endsWith("C.md"))?.displayName, "Gamma");
   assert.equal(graph.nodes.find((node) => node.id.endsWith("A.md"))?.summary, "Local center");
-  assert.equal(graph.edges[0]?.kind, "mentions");
+  assert.deepEqual(
+    graph.edges.map((edge) => [edge.source, edge.target, edge.kind]),
+    [
+      ["wiki/concepts/A.md", "wiki/concepts/B.md", "mentions"],
+      ["wiki/concepts/C.md", "wiki/concepts/A.md", "links_to"],
+    ],
+  );
+  assert.equal(graph.nodes.find((node) => node.id.endsWith("A.md"))?.inbound, 1);
+  assert.equal(graph.nodes.find((node) => node.id.endsWith("A.md"))?.outbound, 1);
 });
 
 test("knowledge view keeps root-anchored links in the markdown fallback", (t) => {

@@ -22,6 +22,7 @@ export interface GraphNode {
   breadcrumb: string[];
   tags: string[];
   summary: string;
+  sourceUrls: string[];
   depth: number;
   navigable: boolean;
 }
@@ -79,6 +80,7 @@ interface CompactNode {
   parentName?: unknown;
   tags?: unknown;
   summary?: unknown;
+  sourceUrls?: unknown;
   degree?: unknown;
   inbound?: unknown;
   outbound?: unknown;
@@ -250,6 +252,9 @@ function normalizeNode(raw: CompactNode): GraphNode {
   const tags = Array.isArray(raw.tags)
     ? raw.tags.filter((tag): tag is string => typeof tag === "string")
     : [];
+  const sourceUrls = Array.isArray(raw.sourceUrls)
+    ? raw.sourceUrls.filter((value): value is string => isSafeHttpUrl(value))
+    : [];
   const inbound = asFiniteNumber(raw.inbound, 0);
   const outbound = asFiniteNumber(raw.outbound, 0);
   const degree = asFiniteNumber(raw.degree, inbound + outbound);
@@ -269,6 +274,7 @@ function normalizeNode(raw: CompactNode): GraphNode {
     breadcrumb,
     tags,
     summary: asString(raw.summary),
+    sourceUrls: Array.from(new Set(sourceUrls)),
     depth: clamp01(asFiniteNumber(raw.d, 1)),
     navigable: Boolean(candidatePath),
   };
@@ -508,6 +514,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function isSafeHttpUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 function asFiniteNumber(value: unknown, fallback: number): number {

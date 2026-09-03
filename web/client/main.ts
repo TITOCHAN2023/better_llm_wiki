@@ -1,6 +1,5 @@
 import mermaid from "mermaid";
 import type { AuditEntry } from "audit-shared";
-import { renderTree } from "./tree.js";
 import { installFeedbackUI } from "./feedback.js";
 import {
   renderGraph,
@@ -18,67 +17,118 @@ interface PageResponse {
   frontmatter: Record<string, unknown> | null;
 }
 
+type Theme = "light" | "dark";
+
+const THEME_STORAGE_KEY = "llm-wiki-theme";
+
+function initialTheme(): Theme {
+  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+}
+
 const state = {
   currentPath: "wiki/index.md" as string,
   rawMarkdown: "" as string,
   author: "me" as string,
   graphController: null as GraphController | null,
+  localGraphController: null as GraphController | null,
+  localGraphRequest: 0,
   graphData: null as GraphData | null,
   graphView: "knowledge" as GraphView,
   hiddenGraphKinds: new Set<string>(),
   selectedGraphNode: null as GraphNode | null,
+  theme: initialTheme(),
 };
 
-// ── Mermaid with Catppuccin Mocha palette ──────────────────────────────────
-mermaid.initialize({
-  startOnLoad: false,
-  theme: "base",
-  securityLevel: "loose",
-  fontFamily: "Inter, system-ui, sans-serif",
-  themeVariables: {
-    // canvas
-    background: "#11111b",
-    // nodes
-    primaryColor: "#313244",
-    primaryTextColor: "#cdd6f4",
-    primaryBorderColor: "#b4befe",
-    secondaryColor: "#45475a",
-    secondaryTextColor: "#cdd6f4",
-    secondaryBorderColor: "#89b4fa",
-    tertiaryColor: "#585b70",
-    tertiaryTextColor: "#cdd6f4",
-    tertiaryBorderColor: "#94e2d5",
-    // edges & text
-    lineColor: "#7f849c",
-    textColor: "#cdd6f4",
-    mainBkg: "#313244",
-    nodeBorder: "#b4befe",
-    clusterBkg: "#181825",
-    clusterBorder: "#45475a",
-    titleColor: "#cdd6f4",
-    edgeLabelBackground: "#181825",
-    // sequence
-    actorBkg: "#313244",
-    actorBorder: "#b4befe",
-    actorTextColor: "#cdd6f4",
-    actorLineColor: "#7f849c",
-    signalColor: "#cdd6f4",
-    signalTextColor: "#cdd6f4",
-    labelBoxBkgColor: "#313244",
-    labelBoxBorderColor: "#b4befe",
-    labelTextColor: "#cdd6f4",
-    loopTextColor: "#cdd6f4",
-    noteBkgColor: "#f9e2af",
-    noteTextColor: "#11111b",
-    noteBorderColor: "#f9e2af",
-    activationBkgColor: "#45475a",
-    activationBorderColor: "#b4befe",
-    // state
-    stateBkg: "#313244",
-    stateBorder: "#b4befe",
-    specialStateColor: "#f38ba8",
+const MERMAID_THEME_VARIABLES: Record<Theme, Record<string, string>> = {
+  dark: {
+    background: "#111111",
+    primaryColor: "#313131",
+    primaryTextColor: "#ededed",
+    primaryBorderColor: "#bcbcbc",
+    secondaryColor: "#454545",
+    secondaryTextColor: "#ededed",
+    secondaryBorderColor: "#a4a4a4",
+    tertiaryColor: "#585858",
+    tertiaryTextColor: "#ededed",
+    tertiaryBorderColor: "#949494",
+    lineColor: "#7f7f84",
+    textColor: "#ededed",
+    mainBkg: "#313131",
+    nodeBorder: "#bcbcbc",
+    clusterBkg: "#181818",
+    clusterBorder: "#454545",
+    titleColor: "#ededed",
+    edgeLabelBackground: "#181818",
+    actorBkg: "#313131",
+    actorBorder: "#bcbcbc",
+    actorTextColor: "#ededed",
+    actorLineColor: "#7f7f84",
+    signalColor: "#ededed",
+    signalTextColor: "#ededed",
+    labelBoxBkgColor: "#313131",
+    labelBoxBorderColor: "#bcbcbc",
+    labelTextColor: "#ededed",
+    loopTextColor: "#ededed",
+    noteBkgColor: "#d8d8d2",
+    noteTextColor: "#111111",
+    noteBorderColor: "#b8b8b2",
+    activationBkgColor: "#454545",
+    activationBorderColor: "#bcbcbc",
+    stateBkg: "#313131",
+    stateBorder: "#bcbcbc",
+    specialStateColor: "#f0f0f0",
   },
-});
+  light: {
+    background: "#ffffff",
+    primaryColor: "#f4f4f1",
+    primaryTextColor: "#20201d",
+    primaryBorderColor: "#6b6b65",
+    secondaryColor: "#e9e9e4",
+    secondaryTextColor: "#20201d",
+    secondaryBorderColor: "#7b7b74",
+    tertiaryColor: "#deded8",
+    tertiaryTextColor: "#20201d",
+    tertiaryBorderColor: "#8a8a83",
+    lineColor: "#777770",
+    textColor: "#20201d",
+    mainBkg: "#f4f4f1",
+    nodeBorder: "#6b6b65",
+    clusterBkg: "#fafaf8",
+    clusterBorder: "#c7c7c0",
+    titleColor: "#20201d",
+    edgeLabelBackground: "#ffffff",
+    actorBkg: "#f4f4f1",
+    actorBorder: "#6b6b65",
+    actorTextColor: "#20201d",
+    actorLineColor: "#777770",
+    signalColor: "#20201d",
+    signalTextColor: "#20201d",
+    labelBoxBkgColor: "#f4f4f1",
+    labelBoxBorderColor: "#6b6b65",
+    labelTextColor: "#20201d",
+    loopTextColor: "#20201d",
+    noteBkgColor: "#fff3bd",
+    noteTextColor: "#20201d",
+    noteBorderColor: "#b7942d",
+    activationBkgColor: "#e9e9e4",
+    activationBorderColor: "#6b6b65",
+    stateBkg: "#f4f4f1",
+    stateBorder: "#6b6b65",
+    specialStateColor: "#4b4b46",
+  },
+};
+
+function configureMermaid(theme: Theme): void {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: "base",
+    securityLevel: "loose",
+    fontFamily: "Inter, system-ui, sans-serif",
+    themeVariables: MERMAID_THEME_VARIABLES[theme],
+  });
+}
+
+configureMermaid(state.theme);
 
 async function main() {
   try {
@@ -86,11 +136,12 @@ async function main() {
     if (cfg.author) state.author = cfg.author;
   } catch {}
 
-  // Tree.
-  const tree = await fetch("/api/tree").then((r) => r.json());
-  renderTree(document.getElementById("tree")!, tree, (path) => {
-    void loadPage(path);
-    history.pushState({ page: path }, "", `/?page=${encodeURIComponent(path)}`);
+  updateThemeControl();
+  document.getElementById("btn-theme")!.addEventListener("click", () => {
+    void applyTheme(state.theme === "dark" ? "light" : "dark", true);
+  });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => {
+    if (readStoredTheme() === null) void applyTheme(event.matches ? "dark" : "light", false);
   });
 
   // Initial page.
@@ -111,8 +162,7 @@ async function main() {
     const page = u.searchParams.get("page");
     if (page) {
       e.preventDefault();
-      void loadPage(page);
-      history.pushState({ page }, "", `/?page=${encodeURIComponent(page)}`);
+      navigateToPage(page);
     }
   });
 
@@ -132,8 +182,7 @@ async function main() {
   const openNode = (node: GraphNode) => {
     if (!node.navigable || !node.path) return;
     closeGraph();
-    void loadPage(node.path);
-    history.pushState({ page: node.path }, "", `/?page=${encodeURIComponent(node.path)}`);
+    navigateToPage(node.path);
   };
 
   const setSelectedNode = (node: GraphNode | null) => {
@@ -162,6 +211,8 @@ async function main() {
     if (visibleNodes.length === 0) return;
     state.graphController = renderGraph(graphSvg, visibleData, {
       selectedId: state.selectedGraphNode?.id,
+      centerId: visibleData.meta.view === "local" ? state.currentPath : null,
+      labelMode: visibleData.meta.view === "local" ? "all" : "priority",
       onNodeSelect: setSelectedNode,
       onNodeOpen: openNode,
     });
@@ -220,6 +271,10 @@ async function main() {
   document.getElementById("graph-close")!.addEventListener("click", closeGraph);
   document.getElementById("graph-fit")!.addEventListener("click", () => state.graphController?.fit());
   document.getElementById("graph-reset")!.addEventListener("click", () => state.graphController?.reset());
+  document.getElementById("local-graph-expand")!.addEventListener("click", () => {
+    state.graphView = "local";
+    void openGraph();
+  });
   document.getElementById("graph-open-page")!.addEventListener("click", () => {
     if (state.selectedGraphNode) openNode(state.selectedGraphNode);
   });
@@ -417,24 +472,138 @@ function renderGraphInspector(node: GraphNode | null): void {
     tags.append(tag);
   }
 
+  const sources = document.getElementById("graph-inspector-sources")!;
+  const sourceLinks = document.getElementById("graph-inspector-source-links")!;
+  sourceLinks.replaceChildren();
+  sources.classList.toggle("hidden", node.sourceUrls.length === 0);
+  const baseLabels = node.sourceUrls.map((url) => graphSourceLabel(url));
+  const labelTotals = new Map<string, number>();
+  const labelSeen = new Map<string, number>();
+  for (const label of baseLabels) labelTotals.set(label, (labelTotals.get(label) ?? 0) + 1);
+  for (const [index, url] of node.sourceUrls.entries()) {
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.title = url;
+    const label = document.createElement("span");
+    const baseLabel = baseLabels[index] ?? "Original source";
+    const ordinal = (labelSeen.get(baseLabel) ?? 0) + 1;
+    labelSeen.set(baseLabel, ordinal);
+    label.textContent = (labelTotals.get(baseLabel) ?? 0) > 1
+      ? `${baseLabel} ${ordinal}`
+      : baseLabel;
+    const arrow = document.createElement("span");
+    arrow.textContent = "↗";
+    link.append(label, arrow);
+    sourceLinks.append(link);
+  }
+
   const openButton = document.getElementById("graph-open-page") as HTMLButtonElement;
   openButton.disabled = !node.navigable;
   openButton.classList.toggle("hidden", !node.navigable);
 }
 
+function graphSourceLabel(value: string): string {
+  try {
+    const url = new URL(value);
+    if (url.pathname.includes("/minutes/")) return "Meeting minutes";
+    if (url.pathname.includes("/docx/")) return "Lark document";
+    if (url.pathname.includes("/wiki/")) return "Lark wiki";
+    if (url.hostname === "arxiv.org") return "arXiv paper";
+    if (url.hostname === "github.com") return "GitHub source";
+    return url.hostname.replace(/^www\./, "");
+  } catch {
+    return "Original source";
+  }
+}
+
 function graphKindTone(kind: string): string {
   const tones: Record<string, string> = {
-    index: "#ffffff",
-    concept: "#f4f4f5",
-    synthesis: "#e4e4e7",
-    entity: "#d4d4d8",
-    summary: "#a1a1aa",
-    raw_source: "#71717a",
-    recent: "#ffffff",
-    section: "#8b8b94",
-    page: "#b7b7bd",
+    index: "var(--graph-kind-index)",
+    concept: "var(--graph-kind-concept)",
+    synthesis: "var(--graph-kind-synthesis)",
+    entity: "var(--graph-kind-entity)",
+    summary: "var(--graph-kind-summary)",
+    raw_source: "var(--graph-kind-raw-source)",
+    recent: "var(--graph-kind-recent)",
+    section: "var(--graph-kind-section)",
+    page: "var(--graph-kind-page)",
   };
-  return tones[kind] ?? "#8b8b94";
+  return tones[kind] ?? "var(--graph-kind-other)";
+}
+
+function navigateToPage(path: string): void {
+  void loadPage(path);
+  history.pushState({ page: path }, "", `/?page=${encodeURIComponent(path)}`);
+}
+
+async function loadLocalGraph(targetPath: string): Promise<void> {
+  const requestId = ++state.localGraphRequest;
+  const stage = document.querySelector<HTMLElement>(".local-graph-stage")!;
+  const svg = document.getElementById("local-graph-svg") as unknown as SVGSVGElement;
+  const loading = document.getElementById("local-graph-loading")!;
+  const empty = document.getElementById("local-graph-empty")!;
+  const count = document.getElementById("local-graph-count")!;
+  const inbound = document.getElementById("local-graph-in")!;
+  const outbound = document.getElementById("local-graph-out")!;
+
+  state.localGraphController?.destroy();
+  state.localGraphController = null;
+  svg.replaceChildren();
+  stage.classList.remove("has-graph");
+  loading.classList.remove("hidden");
+  empty.classList.add("hidden");
+  count.textContent = "Current page";
+  inbound.textContent = "—";
+  outbound.textContent = "—";
+
+  try {
+    const params = new URLSearchParams({ view: "local", path: targetPath });
+    const response = await fetch(`/api/graph?${params}`);
+    if (!response.ok) throw new Error(`Local graph request failed: ${response.status}`);
+    const data = (await response.json()) as GraphData;
+    if (requestId !== state.localGraphRequest || targetPath !== state.currentPath) return;
+
+    const center = data.nodes.find((node) => node.id === targetPath || node.path === targetPath);
+    const centerId = center?.id ?? targetPath;
+    const inboundCount = center?.inbound ?? 0;
+    const outboundCount = center?.outbound ?? 0;
+    inbound.textContent = String(inboundCount);
+    outbound.textContent = String(outboundCount);
+    count.textContent = `${inboundCount} in · ${outboundCount} out`;
+
+    if (!center || data.edges.length === 0) {
+      empty.classList.remove("hidden");
+      empty.querySelector("strong")!.textContent = center ? "No connections" : "No local graph";
+      empty.querySelector("span")!.textContent = center
+        ? "No page links point in or out yet."
+        : "Run wiki lint to compile this page sidecar.";
+      return;
+    }
+
+    stage.classList.add("has-graph");
+    state.localGraphController = renderGraph(svg, data, {
+      centerId,
+      selectedId: centerId,
+      compact: true,
+      labelMode: "all",
+      minWidth: 300,
+      minHeight: 520,
+      openOnClick: true,
+      onNodeOpen: (node) => {
+        if (node.navigable && node.path) navigateToPage(node.path);
+      },
+    });
+  } catch (error) {
+    if (requestId !== state.localGraphRequest) return;
+    console.error(error);
+    empty.classList.remove("hidden");
+    empty.querySelector("strong")!.textContent = "Could not load connections";
+    empty.querySelector("span")!.textContent = "Check the page-local .graph sidecar.";
+  } finally {
+    if (requestId === state.localGraphRequest) loading.classList.add("hidden");
+  }
 }
 
 async function loadPage(pathArg: string): Promise<void> {
@@ -453,42 +622,99 @@ async function loadPage(pathArg: string): Promise<void> {
 
     pageEl.innerHTML = data.html;
 
-    // Render mermaid blocks.
-    const mermaidNodes = pageEl.querySelectorAll("pre.mermaid-block code.language-mermaid");
-    for (let i = 0; i < mermaidNodes.length; i++) {
-      const code = mermaidNodes[i] as HTMLElement;
-      const pre = code.parentElement as HTMLElement;
-      const source = code.textContent ?? "";
-      const id = `mermaid-${Date.now()}-${i}`;
-      try {
-        const { svg } = await mermaid.render(id, source);
-        const container = document.createElement("div");
-        container.className = "mermaid-block";
-        container.innerHTML = svg;
-        const srcLine = pre.getAttribute("data-source-line");
-        if (srcLine) container.setAttribute("data-source-line", srcLine);
-        pre.replaceWith(container);
-      } catch (err) {
-        console.error("mermaid render failed", err);
-      }
-    }
-
-    // Tree selection highlight.
-    document.querySelectorAll("#tree a.active").forEach((el) => el.classList.remove("active"));
-    const link = document.querySelector(`#tree a[data-path="${cssEscape(data.path)}"]`);
-    if (link) link.classList.add("active");
+    await renderMermaidBlocks(pageEl);
 
     // Title chip.
     const titleEl = document.getElementById("wiki-title")!;
     titleEl.textContent = data.title ?? data.path;
 
-    await loadAudits(data.path);
+    await Promise.all([loadAudits(data.path), loadLocalGraph(data.path)]);
     pageEl.scrollTop = 0;
     (document.querySelector("main") as HTMLElement | null)?.scrollTo({ top: 0 });
   } catch (err) {
     console.error(err);
     pageEl.innerHTML = `<p class="loading">Error loading page.</p>`;
   }
+}
+
+let mermaidRenderSequence = 0;
+
+async function renderMermaidBlocks(pageEl: HTMLElement): Promise<void> {
+  const mermaidNodes = pageEl.querySelectorAll("pre.mermaid-block code.language-mermaid");
+  if (mermaidNodes.length === 0) return;
+  await document.fonts.ready;
+  for (const node of Array.from(mermaidNodes)) {
+    const code = node as HTMLElement;
+    const pre = code.parentElement as HTMLElement;
+    const source = code.textContent ?? "";
+    const container = document.createElement("div");
+    container.className = "mermaid-block";
+    container.dataset.mermaidSource = source;
+    const srcLine = pre.getAttribute("data-source-line");
+    if (srcLine) container.setAttribute("data-source-line", srcLine);
+    pre.replaceWith(container);
+    try {
+      await renderMermaidContainer(container, source);
+    } catch (err) {
+      container.replaceWith(pre);
+      console.error("mermaid render failed", err);
+    }
+  }
+}
+
+async function renderMermaidContainer(container: HTMLElement, source: string): Promise<void> {
+  const id = `mermaid-${Date.now()}-${mermaidRenderSequence++}`;
+  const { svg, bindFunctions } = await mermaid.render(id, source, container);
+  container.innerHTML = svg;
+  bindFunctions?.(container);
+}
+
+async function rerenderMermaidBlocks(): Promise<void> {
+  const containers = document.querySelectorAll<HTMLElement>("#page-content .mermaid-block[data-mermaid-source]");
+  if (containers.length === 0) return;
+  await document.fonts.ready;
+  for (const container of Array.from(containers)) {
+    const source = container.dataset.mermaidSource;
+    if (!source) continue;
+    try {
+      await renderMermaidContainer(container, source);
+    } catch (err) {
+      console.error("mermaid theme render failed", err);
+    }
+  }
+}
+
+async function applyTheme(theme: Theme, persist: boolean): Promise<void> {
+  state.theme = theme;
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+  if (persist) {
+    try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch {}
+  }
+  configureMermaid(theme);
+  updateThemeControl();
+  await rerenderMermaidBlocks();
+}
+
+function readStoredTheme(): Theme | null {
+  try {
+    const value = localStorage.getItem(THEME_STORAGE_KEY);
+    return value === "light" || value === "dark" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function updateThemeControl(): void {
+  const button = document.getElementById("btn-theme");
+  const icon = document.getElementById("theme-icon");
+  if (!button || !icon) return;
+  const light = state.theme === "light";
+  const label = light ? "Switch to dark mode" : "Switch to light mode";
+  icon.textContent = light ? "☾" : "☀";
+  button.setAttribute("aria-label", label);
+  button.setAttribute("aria-pressed", String(light));
+  button.setAttribute("title", label);
 }
 
 async function loadAudits(targetPath: string): Promise<void> {
@@ -549,10 +775,6 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (ch) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch] ?? ch),
   );
-}
-
-function cssEscape(s: string): string {
-  return s.replace(/["\\]/g, "\\$&");
 }
 
 void main();

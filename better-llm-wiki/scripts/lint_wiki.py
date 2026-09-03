@@ -178,6 +178,7 @@ RESIDUAL_WIKILINK_RE = re.compile(r"\[\[[^\]\n]+?\]\]")
 LOG_FILENAME_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})\.md$")
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 EXTERNAL_URL_RE = re.compile(r"^[a-z][a-z0-9+.\-]*:", re.IGNORECASE)
+HTTP_URL_RE = re.compile(r"^https?://[^\s]+$", re.IGNORECASE)
 LOG_ENTRY_RE = re.compile(r"^## \[(?P<time>\d{2}:\d{2})\]\s+(?P<op>[a-zA-Z0-9_-]+)\s+\|\s+(?P<title>.+?)\s*$")
 WIKI_MD_LITERAL_RE = re.compile(r"(?P<path>wiki/[^\s`<>\)]*?\.md)")
 BACKTICK_WIKI_MD_LITERAL_RE = re.compile(r"`(?P<path>wiki/[^`\n]+?\.md)`")
@@ -918,6 +919,17 @@ def parse_frontmatter(text: str) -> dict | None:
     result: dict = {}
     i = 0
     lines = body.split("\n")
+
+    def parse_scalar(value: str) -> object:
+        value = value.strip()
+        if value.isdigit() or (value.startswith("-") and value[1:].isdigit()):
+            return int(value)
+        if value.startswith('"') and value.endswith('"'):
+            return value[1:-1].replace("\\n", "\n").replace('\\"', '"')
+        if value.startswith("'") and value.endswith("'"):
+            return value[1:-1]
+        return value
+
     while i < len(lines):
         line = lines[i]
         if not line.strip() or line.lstrip().startswith("#"):
@@ -935,19 +947,26 @@ def parse_frontmatter(text: str) -> dict | None:
                 result[key] = []
             else:
                 parts = [p.strip() for p in inner.split(",")]
-                parsed: list = []
-                for p in parts:
-                    if p.isdigit() or (p.startswith("-") and p[1:].isdigit()):
-                        parsed.append(int(p))
-                    else:
-                        parsed.append(p.strip('"').strip("'"))
-                result[key] = parsed
-        elif val.startswith('"') and val.endswith('"'):
-            result[key] = val[1:-1].replace("\\n", "\n").replace('\\"', '"')
-        elif val.startswith("'") and val.endswith("'"):
-            result[key] = val[1:-1]
+                result[key] = [parse_scalar(part) for part in parts]
+        elif not val:
+            block_items: list[object] = []
+            cursor = i + 1
+            while cursor < len(lines):
+                item_line = lines[cursor]
+                stripped = item_line.lstrip()
+                indent = len(item_line) - len(stripped)
+                if not stripped:
+                    cursor += 1
+                    continue
+                if indent == 0 or not stripped.startswith("- "):
+                    break
+                block_items.append(parse_scalar(stripped[2:]))
+                cursor += 1
+            result[key] = block_items
+            i = cursor
+            continue
         else:
-            result[key] = val
+            result[key] = parse_scalar(val)
         i += 1
     return result
 
@@ -1003,6 +1022,20 @@ def ensure_string_list(value: object) -> list[str]:
     if isinstance(value, str) and value.strip():
         return [value.strip()]
     return []
+
+
+def source_urls_from_frontmatter(frontmatter: dict) -> list[str]:
+    """Return deduplicated, browser-safe provenance URLs from page metadata."""
+    candidates = ensure_string_list(frontmatter.get("source_url"))
+    candidates.extend(ensure_string_list(frontmatter.get("source_urls")))
+    urls: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not HTTP_URL_RE.fullmatch(candidate) or candidate in seen:
+            continue
+        seen.add(candidate)
+        urls.append(candidate)
+    return urls
 
 
 def infer_page_kind(rel_id: str, frontmatter: dict) -> str:
@@ -1279,6 +1312,7 @@ def build_navigation_graph(root_path: Path, nodes: dict[str, dict[str, object]])
                 "displayName": nodes[target].get("displayName", label or target),
                 "qualifiedName": nodes[target].get("qualifiedName", target),
                 "breadcrumb": nodes[target].get("breadcrumb", []),
+                "sourceUrls": nodes[target].get("sourceUrls", []),
             }
             edges.append({"s": current_section_id, "t": target, "k": "listed_in", "w": 1, "d": 1})
 
@@ -1328,6 +1362,7 @@ def build_lineage_graph(
             "displayName": nodes[rel_id].get("displayName", rel_id),
             "qualifiedName": nodes[rel_id].get("qualifiedName", rel_id),
             "breadcrumb": nodes[rel_id].get("breadcrumb", []),
+            "sourceUrls": nodes[rel_id].get("sourceUrls", []),
         }
 
     for rel_id, fm in frontmatters.items():
@@ -1510,7 +1545,11 @@ def load_recent_node_metadata(root_path: Path, rel_id: str) -> dict[str, object]
     if not page_path.is_file():
         return None
     sidecar = load_json_file(Path(f"{page_path}.graph"), {})
-    if isinstance(sidecar, dict) and sidecar.get("id") == rel_id:
+    if (
+        isinstance(sidecar, dict)
+        and sidecar.get("id") == rel_id
+        and "sourceUrls" in sidecar
+    ):
         return sidecar
     try:
         text = page_path.read_text(encoding="utf-8")
@@ -1524,6 +1563,7 @@ def load_recent_node_metadata(root_path: Path, rel_id: str) -> dict[str, object]
         "kind": infer_page_kind(rel_id, frontmatter),
         "tags": ensure_string_list(frontmatter.get("tags")),
         "summary": extract_page_summary(text),
+        "sourceUrls": source_urls_from_frontmatter(frontmatter),
         **build_display_metadata(rel_id, title),
     }
 
@@ -1653,11 +1693,14 @@ def build_recent_log_graph(
         valid_touched: list[str] = []
         for target in entry.get("touched", []):
             target_id = str(target)
-            if target_id not in node_catalog:
-                recovered = load_recent_node_metadata(root_path, target_id)
-                if recovered is None:
-                    continue
-                node_catalog[target_id] = recovered
+            recovered = load_recent_node_metadata(root_path, target_id)
+            if recovered is not None:
+                node_catalog[target_id] = {
+                    **node_catalog.get(target_id, {}),
+                    **recovered,
+                }
+            elif target_id not in node_catalog:
+                continue
             valid_touched.append(target_id)
             touched_ids.add(target_id)
             touched_meta[target_id].append(entry_meta)
@@ -1718,6 +1761,9 @@ def build_recent_log_graph(
             "displayName": data.get("displayName", data.get("title", rel_id)),
             "qualifiedName": data.get("qualifiedName", rel_id),
             "breadcrumb": data.get("breadcrumb", []),
+            "tags": data.get("tags", []),
+            "summary": data.get("summary", ""),
+            "sourceUrls": data.get("sourceUrls", []),
             "bucket": primary_bucket,
             "buckets": buckets,
             "entries": entry_meta,
@@ -1818,6 +1864,7 @@ def sidecar_needs_refresh(root_path: Path, rel_id: str) -> bool:
         "breadcrumb",
         "fileName",
         "parentName",
+        "sourceUrls",
     }
     return any(key not in data for key in required)
 
@@ -2158,6 +2205,7 @@ def build_sidecar_payload(
         "hash": node["hash"],
         "tags": node["tags"],
         "summary": node["summary"],
+        "sourceUrls": node["sourceUrls"],
         "ego": adjacency,
         "stats": {
             "inbound": inbound,
@@ -2170,7 +2218,6 @@ def build_sidecar_payload(
 def write_scoped_graph_sidecars(
     root_path: Path,
     scoped_wiki_files: list[Path],
-    all_wiki_file_set: set[Path],
     preloaded_texts: dict[str, str],
 ) -> dict[str, int]:
     cache_dir = root_path / ".graph-cache"
@@ -2184,18 +2231,37 @@ def write_scoped_graph_sidecars(
             "for complete inbound edges in page-local sidecars"
         )
 
-    all_current_ids = {
-        path.relative_to(root_path).as_posix()
-        for path in all_wiki_file_set
-    }
     scoped_ids = [path.relative_to(root_path).as_posix() for path in sorted(scoped_wiki_files)]
     scoped_id_set = set(scoped_ids)
-    adjacency_by_id: dict[str, dict[str, list[dict[str, str]]]] = {}
-    nodes: dict[str, dict[str, object]] = {}
-    scoped_outgoing: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    # Incremental graph maintenance is a one-hop operation: changed sources and
+    # the targets they used to/newly point at. Do not turn an empty full-corpus
+    # set into an "authoritative" page universe; git-first mode deliberately
+    # avoids scanning every wiki page.
+    reverse_sets: dict[str, set[str]] = {}
+    for target, sources in old_reverse.items():
+        if not isinstance(target, str) or not isinstance(sources, list):
+            continue
+        target_path = root_path / target
+        if not target.startswith("wiki/") or not target.endswith(".md") or not target_path.is_file():
+            continue
+        reverse_sets[target] = {
+            str(source)
+            for source in sources
+            if isinstance(source, str)
+            and source.startswith("wiki/")
+            and source.endswith(".md")
+            and (root_path / source).is_file()
+        }
 
-    for md_file in sorted(scoped_wiki_files):
-        rel_id = md_file.relative_to(root_path).as_posix()
+    compiled_nodes: dict[str, dict[str, object]] = {}
+    compiled_outgoing: dict[str, list[tuple[str, str]]] = {}
+
+    def compile_page(rel_id: str) -> tuple[dict[str, object], list[tuple[str, str]]] | None:
+        if rel_id in compiled_nodes:
+            return compiled_nodes[rel_id], compiled_outgoing[rel_id]
+        md_file = root_path / rel_id
+        if not rel_id.startswith("wiki/") or not rel_id.endswith(".md") or not md_file.is_file():
+            return None
         text = preloaded_texts.get(rel_id)
         if text is None:
             text = md_file.read_text(encoding="utf-8")
@@ -2203,69 +2269,147 @@ def write_scoped_graph_sidecars(
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
         title = extract_page_title(text, md_file.stem)
         display = build_display_metadata(rel_id, title)
-        nodes[rel_id] = {
+        node = {
             "id": rel_id,
             "title": title,
             "kind": infer_page_kind(rel_id, fm),
             "tags": ensure_string_list(fm.get("tags")),
             "summary": extract_page_summary(text),
+            "sourceUrls": source_urls_from_frontmatter(fm),
             "hash": f"sha256:{digest}",
             **display,
         }
-        adjacency_by_id[rel_id] = {"out": [], "in": []}
-
+        outgoing: list[tuple[str, str]] = []
         seen_edges: set[tuple[str, str]] = set()
         for href in extract_md_link_hrefs(text):
             target = canonicalize_graph_href(root_path, href)
-            if target is None or target == rel_id or target not in all_current_ids:
+            if target is None or target == rel_id or not target.startswith("wiki/"):
                 continue
             edge = (target, "links_to")
             if edge in seen_edges:
                 continue
             seen_edges.add(edge)
-            scoped_outgoing[rel_id].append(edge)
+            outgoing.append(edge)
 
         for source_ref in ensure_string_list(fm.get("sources")):
             target = canonicalize_graph_href(root_path, source_ref)
-            if target is None or target == rel_id or target not in all_current_ids:
+            if target is None or target == rel_id or not target.startswith("wiki/"):
                 continue
             edge = (target, "derived_from")
             if edge in seen_edges:
                 continue
             seen_edges.add(edge)
-            scoped_outgoing[rel_id].append(edge)
+            outgoing.append(edge)
+        outgoing.sort(key=lambda item: (item[0], item[1]))
+        compiled_nodes[rel_id] = node
+        compiled_outgoing[rel_id] = outgoing
+        return node, outgoing
 
-    for rel_id, edges in scoped_outgoing.items():
-        adjacency_by_id[rel_id]["out"] = [
-            {"to": target, "kind": kind}
-            for target, kind in sorted(edges, key=lambda item: (item[0], item[1]))
-        ]
-        for target, kind in edges:
-            if target in scoped_id_set:
-                adjacency_by_id[target]["in"].append({"from": rel_id, "kind": kind})
-
+    old_targets = {
+        target
+        for target, sources in reverse_sets.items()
+        if any(source in scoped_id_set for source in sources)
+    }
+    # A missing/cold reverse cache must not make link removal invisible. The
+    # changed page's previous sidecar is a bounded second source for old targets.
     for rel_id in scoped_ids:
-        cached_inbound = old_reverse.get(rel_id, [])
-        if isinstance(cached_inbound, list):
-            existing = {
-                (item["from"], item["kind"])
-                for item in adjacency_by_id[rel_id]["in"]
-            }
-            for source in sorted(str(v) for v in cached_inbound):
-                if source == rel_id or source not in all_current_ids:
-                    continue
-                edge = (source, "links_to")
-                if edge in existing:
-                    continue
-                adjacency_by_id[rel_id]["in"].append({"from": source, "kind": "links_to"})
-                existing.add(edge)
-        adjacency_by_id[rel_id]["in"].sort(key=lambda item: (item["from"], item["kind"]))
+        previous = load_json_file(Path(f"{root_path / rel_id}.graph"), {})
+        if not isinstance(previous, dict):
+            continue
+        previous_ego = previous.get("ego")
+        if not isinstance(previous_ego, dict):
+            continue
+        previous_out = previous_ego.get("out")
+        if not isinstance(previous_out, list):
+            continue
+        for item in previous_out:
+            if not isinstance(item, dict):
+                continue
+            target = item.get("to")
+            if isinstance(target, str) and canonicalize_graph_literal(root_path, target) == target:
+                old_targets.add(target)
+    for sources in reverse_sets.values():
+        sources.difference_update(scoped_id_set)
+
+    new_targets: set[str] = set()
+    for rel_id in scoped_ids:
+        compiled = compile_page(rel_id)
+        if compiled is None:
+            continue
+        _, outgoing = compiled
+        reverse_sets.setdefault(rel_id, set())
+        for target, _kind in outgoing:
+            reverse_sets.setdefault(target, set()).add(rel_id)
+            new_targets.add(target)
+
+    affected_ids = sorted(scoped_id_set | old_targets | new_targets)
+    # Preserve unrelated backlinks even when the reverse cache is cold or
+    # partially stale. Existing target sidecars are only hints: every source is
+    # re-read below and kept only if its Markdown still contains the edge.
+    for rel_id in affected_ids:
+        previous = load_json_file(Path(f"{root_path / rel_id}.graph"), {})
+        if not isinstance(previous, dict):
+            continue
+        previous_ego = previous.get("ego")
+        if not isinstance(previous_ego, dict):
+            continue
+        previous_in = previous_ego.get("in")
+        if not isinstance(previous_in, list):
+            continue
+        for item in previous_in:
+            if not isinstance(item, dict):
+                continue
+            source = item.get("from")
+            if (
+                isinstance(source, str)
+                and source not in scoped_id_set
+                and canonicalize_graph_literal(root_path, source) == source
+            ):
+                reverse_sets.setdefault(rel_id, set()).add(source)
+
+    adjacency_by_id: dict[str, dict[str, list[dict[str, str]]]] = {}
+    valid_reverse_updates: dict[str, set[str]] = {}
+    for rel_id in affected_ids:
+        compiled = compile_page(rel_id)
+        if compiled is None:
+            continue
+        _node, outgoing = compiled
+        inbound: list[dict[str, str]] = []
+        valid_sources: set[str] = set()
+        for source in sorted(reverse_sets.get(rel_id, set())):
+            source_compiled = compile_page(source)
+            if source_compiled is None:
+                continue
+            _source_node, source_outgoing = source_compiled
+            matching_kinds = sorted({kind for target, kind in source_outgoing if target == rel_id})
+            if not matching_kinds:
+                continue
+            valid_sources.add(source)
+            inbound.extend({"from": source, "kind": kind} for kind in matching_kinds)
+        valid_reverse_updates[rel_id] = valid_sources
+        adjacency_by_id[rel_id] = {
+            "out": [{"to": target, "kind": kind} for target, kind in outgoing],
+            "in": inbound,
+        }
+
+    for target, sources in valid_reverse_updates.items():
+        reverse_sets[target] = sources
 
     written = 0
-    for rel_id in scoped_ids:
+    for rel_id in affected_ids:
+        if rel_id not in adjacency_by_id or rel_id not in compiled_nodes:
+            continue
         sidecar_path = Path(f"{root_path / rel_id}.graph")
-        atomic_write_json(sidecar_path, build_sidecar_payload(rel_id, nodes[rel_id], adjacency_by_id[rel_id]))
+        atomic_write_json(
+            sidecar_path,
+            build_sidecar_payload(rel_id, compiled_nodes[rel_id], adjacency_by_id[rel_id]),
+        )
         written += 1
+
+    atomic_write_json(
+        cache_dir / "reverse-links.graph",
+        {target: sorted(sources) for target, sources in sorted(reverse_sets.items())},
+    )
     return {"sidecars": written}
 
 
@@ -2314,6 +2458,7 @@ def write_graph_artifacts(
             "kind": infer_page_kind(rel_id, fm),
             "tags": ensure_string_list(fm.get("tags")),
             "summary": extract_page_summary(text),
+            "sourceUrls": source_urls_from_frontmatter(fm),
             "hash": current_hashes[rel_id],
             **display,
         }
@@ -2389,6 +2534,7 @@ def write_graph_artifacts(
                 "kind": data["kind"],
                 "tags": data["tags"],
                 "summary": data["summary"],
+                "sourceUrls": data["sourceUrls"],
                 "degree": data["degree"],
                 "inbound": data["inbound"],
                 "outbound": data["outbound"],
@@ -3187,7 +3333,6 @@ def lint(root: str, changed_only: bool = True) -> int:
         scoped_graph_stats = write_scoped_graph_sidecars(
             root_path=root_path,
             scoped_wiki_files=all_lint_files,
-            all_wiki_file_set=wiki_file_set,
             preloaded_texts=preloaded_texts,
         )
         print(

@@ -21,6 +21,7 @@ export interface GraphNode extends d3force.SimulationNodeDatum {
   breadcrumb: string[];
   tags: string[];
   summary: string;
+  sourceUrls: string[];
   depth: number;
   navigable: boolean;
 }
@@ -48,6 +49,12 @@ export interface GraphData {
 
 export interface GraphOptions {
   selectedId?: string | null;
+  centerId?: string | null;
+  compact?: boolean;
+  labelMode?: "priority" | "all";
+  minWidth?: number;
+  minHeight?: number;
+  openOnClick?: boolean;
   onNodeSelect?: (node: GraphNode | null) => void;
   onNodeOpen?: (node: GraphNode) => void;
 }
@@ -60,16 +67,18 @@ export interface GraphController {
 }
 
 const KIND_TONES: Record<string, string> = {
-  index: "#ffffff",
-  concept: "#f4f4f5",
-  synthesis: "#e4e4e7",
-  entity: "#d4d4d8",
-  summary: "#a1a1aa",
-  raw_source: "#71717a",
-  recent: "#ffffff",
-  section: "#8b8b94",
-  page: "#b7b7bd",
+  index: "var(--graph-kind-index)",
+  concept: "var(--graph-kind-concept)",
+  synthesis: "var(--graph-kind-synthesis)",
+  entity: "var(--graph-kind-entity)",
+  summary: "var(--graph-kind-summary)",
+  raw_source: "var(--graph-kind-raw-source)",
+  recent: "var(--graph-kind-recent)",
+  section: "var(--graph-kind-section)",
+  page: "var(--graph-kind-page)",
 };
+
+let graphInstanceSequence = 0;
 
 /**
  * Render one normalized graph shape. The server absorbs protocol/version
@@ -82,10 +91,14 @@ export function renderGraph(
 ): GraphController {
   const svg = d3sel.select(svgEl);
   svg.selectAll("*").remove();
+  const instanceKey = sanitizeToken(svgEl.id || `graph-${++graphInstanceSequence}`);
+  const glowId = `${instanceKey}-soft-glow`;
+  const arrowId = `${instanceKey}-arrow`;
+  svg.style("--graph-soft-glow", `url(#${glowId})`);
 
   const dimensions = () => ({
-    width: Math.max(svgEl.clientWidth, 640),
-    height: Math.max(svgEl.clientHeight, 480),
+    width: Math.max(svgEl.clientWidth, opts.minWidth ?? 640),
+    height: Math.max(svgEl.clientHeight, opts.minHeight ?? 480),
   });
   let { width, height } = dimensions();
   svg.attr("viewBox", `0 0 ${width} ${height}`);
@@ -93,7 +106,7 @@ export function renderGraph(
   const defs = svg.append("defs");
   const glow = defs
     .append("filter")
-    .attr("id", "graph-soft-glow")
+    .attr("id", glowId)
     .attr("x", "-100%")
     .attr("y", "-100%")
     .attr("width", "300%")
@@ -105,7 +118,7 @@ export function renderGraph(
 
   defs
     .append("marker")
-    .attr("id", "graph-arrow")
+    .attr("id", arrowId)
     .attr("viewBox", "0 -5 10 10")
     .attr("refX", 17)
     .attr("refY", 0)
@@ -114,7 +127,7 @@ export function renderGraph(
     .attr("orient", "auto")
     .append("path")
     .attr("d", "M0,-4L8,0L0,4")
-    .attr("fill", "#6f6f78");
+    .attr("fill", "context-stroke");
 
   const root = svg.append("g").attr("class", "graph-root");
   const linkLayer = root.append("g").attr("class", "links");
@@ -123,18 +136,51 @@ export function renderGraph(
   const nodes = data.nodes.map((node) => ({ ...node }));
   const links = data.edges.map((edge) => ({ ...edge }));
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const centerId = opts.centerId ?? null;
+  const incoming = new Set<string>();
+  const outgoing = new Set<string>();
   const adjacency = new Map<string, Set<string>>(nodes.map((node) => [node.id, new Set()]));
   for (const edge of links) {
     const source = edgeId(edge.source);
     const target = edgeId(edge.target);
     adjacency.get(source)?.add(target);
     adjacency.get(target)?.add(source);
+    if (centerId && target === centerId) incoming.add(source);
+    if (centerId && source === centerId) outgoing.add(target);
   }
 
-  seedPositions(nodes, width, height);
-  const radius = (node: GraphNode) => Math.min(17, 5.5 + Math.sqrt(Math.max(1, node.degree)) * 1.55);
-  const linkDistance = data.meta.view === "local" ? 155 : data.meta.view === "navigation" ? 118 : 96;
-  const charge = data.meta.view === "local" ? -520 : -260;
+  seedPositions(nodes, width, height, centerId, links);
+  const centerNode = centerId ? nodeById.get(centerId) : undefined;
+  if (centerNode) {
+    centerNode.fx = width / 2;
+    centerNode.fy = height / 2;
+  }
+  const relationFor = (id: string): "center" | "incoming" | "outgoing" | "both" | "other" => {
+    if (id === centerId) return "center";
+    if (incoming.has(id) && outgoing.has(id)) return "both";
+    if (incoming.has(id)) return "incoming";
+    if (outgoing.has(id)) return "outgoing";
+    return "other";
+  };
+  const targetY = (node: GraphNode): number => {
+    if (!centerId) return height / 2;
+    const relation = relationFor(node.id);
+    if (relation === "incoming") return height * 0.24;
+    if (relation === "outgoing") return height * 0.76;
+    return height / 2;
+  };
+  const radius = (node: GraphNode) => {
+    const base = Math.min(17, 5.5 + Math.sqrt(Math.max(1, node.degree)) * 1.55);
+    return node.id === centerId ? Math.max(12, base) : base;
+  };
+  const linkDistance = opts.compact
+    ? 86
+    : data.meta.view === "local"
+      ? 155
+      : data.meta.view === "navigation"
+        ? 118
+        : 96;
+  const charge = opts.compact ? -190 : data.meta.view === "local" ? -520 : -260;
 
   const simulation = d3force
     .forceSimulation<GraphNode>(nodes)
@@ -152,8 +198,11 @@ export function renderGraph(
       "collision",
       d3force.forceCollide<GraphNode>().radius((node) => radius(node) + 20).strength(0.92),
     )
-    .force("x", d3force.forceX(width / 2).strength(0.028))
-    .force("y", d3force.forceY(height / 2).strength(0.028))
+    .force("x", d3force.forceX<GraphNode>(width / 2).strength(opts.compact ? 0.055 : 0.028))
+    .force(
+      "y",
+      d3force.forceY<GraphNode>((node) => targetY(node)).strength(opts.compact ? 0.09 : 0.028),
+    )
     .alphaDecay(0.035)
     .velocityDecay(0.38);
 
@@ -162,17 +211,24 @@ export function renderGraph(
     .data(links)
     .enter()
     .append("path")
-    .attr("class", (edge) => `link edge-${sanitizeToken(edge.kind)}`)
+    .attr("class", (edge) => {
+      const source = edgeId(edge.source);
+      const target = edgeId(edge.target);
+      const relation = target === centerId ? "incoming" : source === centerId ? "outgoing" : "other";
+      return `link edge-${sanitizeToken(edge.kind)} relation-${relation}`;
+    })
     .attr("fill", "none")
-    .attr("marker-end", "url(#graph-arrow)")
+    .attr("marker-end", `url(#${arrowId})`)
     .attr("stroke-opacity", (edge) => 0.1 + 0.38 * edge.depth)
     .attr("stroke-width", (edge) => 0.7 + Math.min(2.2, Math.log2(edge.weight + 1) * 0.65));
 
   const priorityLabels = new Set(
-    [...nodes]
-      .sort((a, b) => b.degree - a.degree)
-      .slice(0, Math.max(8, Math.min(18, Math.ceil(nodes.length * 0.14))))
-      .map((node) => node.id),
+    opts.labelMode === "all"
+      ? nodes.map((node) => node.id)
+      : [...nodes]
+          .sort((a, b) => b.degree - a.degree)
+          .slice(0, Math.max(8, Math.min(18, Math.ceil(nodes.length * 0.14))))
+          .map((node) => node.id),
   );
 
   const nodeSelection = nodeLayer
@@ -183,7 +239,8 @@ export function renderGraph(
     .attr("class", (node) => {
       const selected = node.id === opts.selectedId ? " selected" : "";
       const labeled = priorityLabels.has(node.id) ? " labeled" : "";
-      return `node kind-${sanitizeToken(node.kind)}${selected}${labeled}`;
+      const relation = centerId ? ` relation-${relationFor(node.id)}` : "";
+      return `node kind-${sanitizeToken(node.kind)}${relation}${selected}${labeled}`;
     })
     .attr("role", "button")
     .attr("tabindex", 0)
@@ -223,15 +280,18 @@ export function renderGraph(
   const dragBehavior = d3drag
     .drag<SVGGElement, GraphNode>()
     .on("start", (event, node) => {
+      if (node.id === centerId) return;
       if (!event.active) simulation.alphaTarget(0.14).restart();
       node.fx = node.x;
       node.fy = node.y;
     })
     .on("drag", (event, node) => {
+      if (node.id === centerId) return;
       node.fx = event.x;
       node.fy = event.y;
     })
     .on("end", (event, node) => {
+      if (node.id === centerId) return;
       if (!event.active) simulation.alphaTarget(0);
       node.fx = null;
       node.fy = null;
@@ -254,6 +314,10 @@ export function renderGraph(
     .on("mouseleave", () => highlightNeighborhood(null))
     .on("click", (event, node) => {
       event.stopPropagation();
+      if (opts.openOnClick && node.id !== centerId && node.navigable) {
+        opts.onNodeOpen?.(node);
+        return;
+      }
       selectNode(node.id);
       opts.onNodeSelect?.(node);
     })
@@ -264,6 +328,10 @@ export function renderGraph(
     .on("keydown", (event, node) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
+        if (opts.openOnClick && node.id !== centerId && node.navigable) {
+          opts.onNodeOpen?.(node);
+          return;
+        }
         selectNode(node.id);
         opts.onNodeSelect?.(node);
       }
@@ -331,7 +399,12 @@ export function renderGraph(
       node.fx = null;
       node.fy = null;
     }
-    seedPositions(nodes, width, height);
+    seedPositions(nodes, width, height, centerId, links);
+    const center = centerId ? nodeById.get(centerId) : undefined;
+    if (center) {
+      center.fx = width / 2;
+      center.fy = height / 2;
+    }
     simulation.alpha(0.9).restart();
     svg.call(zoomBehavior.transform, d3zoom.zoomIdentity);
     window.setTimeout(() => fit(), 560);
@@ -344,8 +417,15 @@ export function renderGraph(
     height = next.height;
     svg.attr("viewBox", `0 0 ${width} ${height}`);
     simulation.force("center", d3force.forceCenter(width / 2, height / 2));
-    simulation.force("x", d3force.forceX(width / 2).strength(0.028));
-    simulation.force("y", d3force.forceY(height / 2).strength(0.028));
+    simulation.force("x", d3force.forceX<GraphNode>(width / 2).strength(opts.compact ? 0.055 : 0.028));
+    simulation.force(
+      "y",
+      d3force.forceY<GraphNode>((node) => targetY(node)).strength(opts.compact ? 0.09 : 0.028),
+    );
+    if (centerNode) {
+      centerNode.fx = width / 2;
+      centerNode.fy = height / 2;
+    }
     simulation.alpha(0.24).restart();
   });
   resizeObserver.observe(svgEl);
@@ -364,7 +444,64 @@ export function renderGraph(
   };
 }
 
-function seedPositions(nodes: GraphNode[], width: number, height: number): void {
+function seedPositions(
+  nodes: GraphNode[],
+  width: number,
+  height: number,
+  centerId: string | null = null,
+  edges: GraphEdge[] = [],
+): void {
+  if (centerId) {
+    const incoming = new Set<string>();
+    const outgoing = new Set<string>();
+    for (const edge of edges) {
+      const source = edgeId(edge.source);
+      const target = edgeId(edge.target);
+      if (target === centerId) incoming.add(source);
+      if (source === centerId) outgoing.add(target);
+    }
+    const groups: Record<"incoming" | "outgoing" | "both" | "other", GraphNode[]> = {
+      incoming: [],
+      outgoing: [],
+      both: [],
+      other: [],
+    };
+    for (const node of nodes) {
+      if (node.id === centerId) {
+        node.x = width / 2;
+        node.y = height / 2;
+        node.vx = 0;
+        node.vy = 0;
+        continue;
+      }
+      const isIncoming = incoming.has(node.id);
+      const isOutgoing = outgoing.has(node.id);
+      const relation = isIncoming && isOutgoing
+        ? "both"
+        : isIncoming
+          ? "incoming"
+          : isOutgoing
+            ? "outgoing"
+            : "other";
+      groups[relation].push(node);
+    }
+    const placeBand = (items: GraphNode[], centerY: number, spreadY: number): void => {
+      items.sort((a, b) => hashString(a.id) - hashString(b.id));
+      const count = Math.max(1, items.length);
+      items.forEach((node, index) => {
+        const angle = ((index + 0.5) / count) * Math.PI * 2;
+        node.x = width / 2 + Math.cos(angle) * Math.max(54, width * 0.34);
+        node.y = centerY + Math.sin(angle) * spreadY;
+        node.vx = 0;
+        node.vy = 0;
+      });
+    };
+    placeBand(groups.incoming, height * 0.24, Math.max(42, height * 0.105));
+    placeBand(groups.outgoing, height * 0.76, Math.max(42, height * 0.105));
+    placeBand(groups.both, height / 2, Math.max(50, height * 0.16));
+    placeBand(groups.other, height / 2, Math.max(56, height * 0.2));
+    return;
+  }
   const ring = Math.max(130, Math.min(width, height) * 0.34);
   for (const node of nodes) {
     const hash = hashString(node.id);
@@ -395,7 +532,7 @@ function edgeId(value: string | GraphNode): string {
 }
 
 function toneFor(kind: string): string {
-  return KIND_TONES[kind] ?? "#8b8b94";
+  return KIND_TONES[kind] ?? "var(--graph-kind-other)";
 }
 
 function sanitizeToken(value: string): string {

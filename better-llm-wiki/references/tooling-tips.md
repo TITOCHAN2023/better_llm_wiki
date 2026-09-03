@@ -37,7 +37,8 @@ Then open `http://127.0.0.1:4175`.
 
 Features:
 
-- left sidebar navigation from `wiki/index.md`
+- persistent current-page graph in the left rail, built from both `ego.in` backlinks and `ego.out` links in the page sidecar
+- directed arrows, incoming/outgoing counts, and click-to-open neighbor pages; the full graph workbench remains available from the top bar
 - rendered markdown with mermaid and KaTeX
 - current-page audit list
 - selection-based feedback writing into `<wiki-root>/audit/`
